@@ -1,12 +1,8 @@
-version: '3.8'
-
 services:
   qwen-proxy:
     build: .
     ports:
       - "${PORT:-8765}:${PORT:-8765}"
-    volumes:
-      - ~/.qwen:/root/.qwen  # 持久化认证凭据
     environment:
       - NODE_ENV=production
       - PORT=${PORT:-8765}
