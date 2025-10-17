@@ -7,13 +7,14 @@ import time
 import sys
 from urllib.parse import urlparse
 
-# Default Qwen configuration (from qwen-code)
+# 默认 Qwen 配置 (来自 qwen-code)
 DEFAULT_QWEN_API_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1'
 DEFAULT_MODEL = 'qwen3-coder-plus'
+DEFAULT_ANTHROPIC_MODEL = 'claude-3-5-sonnet-latest'
 QWEN_OAUTH_CLIENT_ID = 'f0304373b74a44d2b584a3fb70ca9e56'
 
 def load_credentials():
-    """Load Qwen credentials from file"""
+    """从文件加载 Qwen 凭据"""
     home_dir = os.path.expanduser("~")
     creds_path = os.path.join(home_dir, ".qwen", "oauth_creds.json")
     
@@ -21,21 +22,21 @@ def load_credentials():
         with open(creds_path, 'r') as f:
             return json.load(f)
     except FileNotFoundError:
-        print("No credentials found. Please authenticate with qwen-code first.")
+        print("未找到凭据。请先使用 qwen-code 进行认证。")
         return None
     except Exception as e:
-        print(f"Error loading credentials: {e}")
+        print(f"加载凭据时出错: {e}")
         return None
 
 def get_api_endpoint(credentials):
-    """Get the API endpoint, using resource_url if available"""
-    # Check if credentials contain a custom endpoint
+    """获取 API 端点，如果可用则使用 resource_url"""
+    # 检查凭据是否包含自定义端点
     if credentials and 'resource_url' in credentials and credentials['resource_url']:
         endpoint = credentials['resource_url']
-        # Ensure it has a scheme
+        # 确保有协议
         if not urlparse(endpoint).scheme:
             endpoint = f"https://{endpoint}"
-        # Ensure it has the /v1 suffix
+        # 确保有 /v1 后缀
         if not endpoint.endswith('/v1'):
             if endpoint.endswith('/'):
                 endpoint += 'v1'
@@ -43,36 +44,22 @@ def get_api_endpoint(credentials):
                 endpoint += '/v1'
         return endpoint
     else:
-        # Use default endpoint
+        # 使用默认端点
         return DEFAULT_QWEN_API_BASE_URL
 
-def make_api_call(prompt):
-    """Make a direct API call to Qwen using existing credentials"""
-    print("Making direct API call to Qwen...")
+def test_v1_endpoints():
+    """测试 OpenAI 兼容的 v1 端点"""
+    print("测试 v1 端点...")
     
-    # Load credentials
+    # 加载凭据
     credentials = load_credentials()
     if not credentials:
         return False
     
     access_token = credentials.get('access_token')
     if not access_token:
-        print("No access token found in credentials.")
+        print("凭据中未找到访问令牌。")
         return False
-    
-    # Get the correct API endpoint
-    api_endpoint = get_api_endpoint(credentials)
-    print(f"Using API endpoint: {api_endpoint}")
-    
-    # Make API call
-    url = f"{api_endpoint}/chat/completions"
-    payload = {
-        "model": DEFAULT_MODEL,
-        "messages": [
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.3
-    }
     
     headers = {
         "Content-Type": "application/json",
@@ -80,62 +67,184 @@ def make_api_call(prompt):
         "User-Agent": "QwenCode/1.0.0 (linux; x64)"
     }
     
+    # 测试 /v1/models 端点
+    print("\n1. 测试 /v1/models 端点...")
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        response = requests.get("http://localhost:8765/v1/models", headers=headers, timeout=10)
         
         if response.status_code == 200:
             data = response.json()
-            print("Response from Qwen:")
-            print(data["choices"][0]["message"]["content"])
-            print("\nDirect API call successful!")
+            print(f"   ✓ /v1/models: 找到 {len(data['data'])} 个模型")
+            for model in data["data"]:
+                print(f"     - {model['id']}")
+        else:
+            print(f"   ✗ /v1/models 失败，状态码: {response.status_code}")
+            print(f"     响应: {response.text}")
+            return False
+    except Exception as e:
+        print(f"   ✗ /v1/models 错误: {str(e)}")
+        return False
+    
+    # 测试 /v1/chat/completions 端点
+    print("\n2. 测试 /v1/chat/completions 端点...")
+    try:
+        payload = {
+            "model": DEFAULT_MODEL,
+            "messages": [
+                {"role": "user", "content": "Hello, please tell me about yourself in 50 words."}
+            ],
+            "temperature": 0.3,
+            "max_tokens": 150
+        }
+        
+        response = requests.post(
+            "http://localhost:8765/v1/chat/completions", 
+            json=payload, 
+            headers=headers, 
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            print("   ✓ /v1/chat/completions: 成功")
+            print(f"     响应: {data['choices'][0]['message']['content'][:100]}...")
+        else:
+            print(f"   ✗ /v1/chat/completions 失败，状态码: {response.status_code}")
+            print(f"     响应: {response.text}")
+            return False
+    except Exception as e:
+        print(f"   ✗ /v1/chat/completions 错误: {str(e)}")
+        return False
+    
+    return True
+
+def test_anthropic_endpoints():
+    """测试 Claude Code 优化的 Anthropic 兼容端点"""
+    print("\n测试 Claude Code 优化的 Anthropic 端点...")
+    
+    # 加载凭据
+    credentials = load_credentials()
+    if not credentials:
+        return False
+    
+    access_token = credentials.get('access_token')
+    if not access_token:
+        print("凭据中未找到访问令牌。")
+        return False
+    
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {access_token}",
+        "User-Agent": "QwenCode/1.0.0 (linux; x64)",
+        "anthropic-version": "2023-06-01"  # 标准 Anthropic 头部
+    }
+    
+    # 测试 /anthropic/v1/models 端点
+    print("\n3. 测试 /anthropic/v1/models 端点...")
+    try:
+        response = requests.get("http://localhost:8765/anthropic/v1/models", headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            print(f"   ✓ /anthropic/v1/models: 找到 {len(data['data'])} 个模型")
+            for model in data["data"]:
+                print(f"     - {model['id']}")
+        else:
+            print(f"   ✗ /anthropic/v1/models 失败，状态码: {response.status_code}")
+            print(f"     响应: {response.text}")
+            return False
+    except Exception as e:
+        print(f"   ✗ /anthropic/v1/models 错误: {str(e)}")
+        return False
+    
+    # 测试 /anthropic/v1/messages 端点
+    print("\n4. 测试 /anthropic/v1/messages 端点...")
+    try:
+        payload = {
+            "model": DEFAULT_ANTHROPIC_MODEL,
+            "max_tokens": 150,
+            "temperature": 0.3,
+            "messages": [
+                {"role": "user", "content": "Hello, please tell me about yourself in 50 words."}
+            ]
+        }
+        
+        response = requests.post(
+            "http://localhost:8765/anthropic/v1/messages", 
+            json=payload, 
+            headers=headers, 
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            print("   ✓ /anthropic/v1/messages: 成功")
+            if 'content' in data and len(data['content']) > 0:
+                print(f"     响应: {data['content'][0]['text'][:100]}...")
+            else:
+                print("     响应: 未返回内容")
+        else:
+            print(f"   ✗ /anthropic/v1/messages 失败，状态码: {response.status_code}")
+            print(f"     响应: {response.text}")
+            return False
+    except Exception as e:
+        print(f"   ✗ /anthropic/v1/messages 错误: {str(e)}")
+        return False
+    
+    return True
+
+def test_health_endpoint():
+    """测试健康端点"""
+    print("\n5. 测试健康端点...")
+    try:
+        response = requests.get("http://localhost:8765/health", timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            print("   ✓ 健康端点: 正常")
+            print(f"     状态: {data.get('status', '未知')}")
             return True
         else:
-            print(f"API call failed with status code: {response.status_code}")
-            print(response.text)
+            print(f"   ✗ 健康端点失败，状态码: {response.status_code}")
+            print(f"     响应: {response.text}")
             return False
-            
-    except requests.exceptions.Timeout:
-        print("API call timed out.")
-        return False
     except Exception as e:
-        print(f"Error making API call: {str(e)}")
+        print(f"   ✗ 健康端点错误: {str(e)}")
         return False
-
-def read_file_content(file_path):
-    """Read content from a file"""
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read()
-    except Exception as e:
-        print(f"Error reading file {file_path}: {str(e)}")
-        return None
 
 def main():
-    """Main function"""
-    if len(sys.argv) < 2:
-        print("Usage: python3 simple_qwen_test.py \"your prompt here\"")
-        print("   or: python3 simple_qwen_test.py /path/to/file")
+    """主函数"""
+    print("Qwen OpenAI 兼容和 Claude Code 优化 Anthropic 代理测试")
+    print("=" * 70)
+    
+    # 首先测试健康端点
+    health_ok = test_health_endpoint()
+    
+    if not health_ok:
+        print("\n❌ 健康检查失败 - 代理服务器可能未运行")
         return
     
-    # Check if the argument is a file path
-    arg = sys.argv[1]
-    if os.path.isfile(arg):
-        # Read file content as prompt
-        prompt = read_file_content(arg)
-        if prompt is None:
-            return
-        print(f"Using content of file '{arg}' as prompt")
+    # 测试 v1 端点 (OpenAI 兼容)
+    v1_ok = test_v1_endpoints()
+    
+    # 测试 Claude Code 优化的 Anthropic 端点
+    anthropic_ok = test_anthropic_endpoints()
+    
+    # 总结
+    print("\n" + "=" * 70)
+    print("测试总结:")
+    print(f"  健康检查: {'✅' if health_ok else '❌'}")
+    print(f"  v1 端点: {'✅' if v1_ok else '❌'}")
+    print(f"  Claude Code 端点: {'✅' if anthropic_ok else '❌'}")
+    
+    if v1_ok and anthropic_ok:
+        print("\n🎉 所有测试通过！代理服务器在 OpenAI 和 Claude Code 优化的 Anthropic API 方面都正常工作。")
+    elif v1_ok:
+        print("\n⚠️  OpenAI 兼容 API 工作正常，但 Claude Code 优化的 API 存在问题。")
+    elif anthropic_ok:
+        print("\n⚠️  Claude Code 优化的 API 工作正常，但 OpenAI API 存在问题。")
     else:
-        # Use command line arguments as prompt
-        prompt = " ".join(sys.argv[1:])
-    
-    print("Qwen Direct API Test")
-    print("=" * 20)
-    print(f"Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
-    
-    success = make_api_call(prompt)
-    if not success:
-        print("\nTest failed")
+        print("\n❌ 两个 API 都存在问题。请检查您的代理服务器配置。")
 
 if __name__ == "__main__":
     main()

@@ -5,6 +5,7 @@ const { QwenAPI } = require('./qwen/api.js');
 const { QwenAuthManager } = require('./qwen/auth.js');
 const { DebugLogger } = require('./utils/logger.js');
 const { countTokens } = require('./utils/tokenCounter.js');
+const { AnthropicProxy } = require('./anthropic/anthropicProxy.js');
 
 const app = express();
 // Increase body parser limits for large requests
@@ -306,12 +307,24 @@ class QwenOpenAIProxy {
   }
 }
 
-// Initialize proxy
+// Initialize proxies
 const proxy = new QwenOpenAIProxy();
+const anthropicProxy = new AnthropicProxy();
 
-// Routes
+// OpenAI-compatible routes
 app.post('/v1/chat/completions', (req, res) => proxy.handleChatCompletion(req, res));
 app.get('/v1/models', (req, res) => proxy.handleModels(req, res));
+
+// Anthropic API routes for Claude Code CLI compatibility
+app.post('/anthropic/v1/messages', (req, res) => {
+  // 检查是否为流式请求
+  if (req.body.stream) {
+    anthropicProxy.handleStreamingRequest(req, res);
+  } else {
+    anthropicProxy.handleMessages(req, res);
+  }
+});
+app.get('/anthropic/v1/models', (req, res) => anthropicProxy.handleModels(req, res));
 
 // Authentication routes
 app.post('/auth/initiate', (req, res) => proxy.handleAuthInitiate(req, res));
@@ -406,6 +419,7 @@ process.on('SIGTERM', async () => {
 app.listen(PORT, HOST, async () => {
   console.log(`Qwen OpenAI Proxy listening on http://${HOST}:${PORT}`);
   console.log(`OpenAI-compatible endpoint: http://${HOST}:${PORT}/v1`);
+  console.log(`Anthropic-compatible endpoint: http://${HOST}:${PORT}/v2`);
   console.log(`Authentication endpoint: http://${HOST}:${PORT}/auth/initiate`);
   
   // Show available accounts

@@ -1,84 +1,99 @@
-# Multi-Account Management System
+# 多账户管理系统
 
-This document outlines the planned features for implementing multi-account management in the Qwen OpenAI Proxy.
+本文档概述了在 Qwen OpenAI 代理中实现的多账户管理功能。
 
-## Feature 1: Multi-Account Authentication
+## 功能 1：多账户认证
 
-### Goal
-Enable users to authenticate and manage multiple Qwen accounts to overcome the 2K request limit per account.
+### 目标
+启用用户认证和管理多个 Qwen 账户以克服每个账户 2K 请求限制。
 
-### Requirements
-- Support authentication of multiple Qwen accounts
-- Store credentials for each account separately
-- Provide a mechanism to add/remove accounts
-- Display account information (name, status, etc.)
+### 实现
+- 支持多个 Qwen 账户的认证
+- 为每个账户分别存储凭据
+- 提供添加/删除账户的机制
+- 显示账户信息（名称、状态等）
 
-### Implementation Plan
-- Extend `QwenAuthManager` to handle multiple credential files
-- Modify `npm run auth` to support multiple accounts
-- Create separate credential files for each account (e.g., `oauth_creds_1.json`, `oauth_creds_2.json`)
-- Add account management commands
+### 实现方式
+- 扩展 `QwenAuthManager` 以处理多个凭据文件
+- 修改 `authenticate.js` 以支持多账户
+- 为每个账户创建单独的凭据文件（例如，`oauth_creds_account1.json`、`oauth_creds_account2.json`）
+- 添加账户管理命令
 
-## Feature 2: Request Counting and Quota Management
+## 功能 2：请求计数和配额管理
 
-### Goal
-Track the number of requests made per account and manage quota limits.
+### 目标
+跟踪每个账户的请求数量并管理配额限制。
 
-### Requirements
-- Count requests made per account
-- Reset counters daily based on UTC time
-- Display remaining quota per account
-- Detect when an account has reached its limit
+### 实现
+- 统计每个账户的请求数量
+- 基于 UTC 时间每天重置计数器
+- 显示每个账户的剩余配额
+- 检测账户何时达到其限制
 
-### Implementation Plan
-- Implement a client-side request counter
-- Store request counts in a persistent file
-- Reset counters at UTC midnight
-- Integrate with account management system
+### 实现方式
+- 实现客户端请求计数器
+- 将请求计数存储在 `~/.qwen/request_counts.json` 持久文件中
+- 在 UTC 午夜重置计数器
+- 与账户管理系统集成
 
-## Feature 3: Automatic Account Rotation
+## 功能 3：自动账户轮换
 
-### Goal
-Automatically switch between accounts when quota limits are reached.
+### 目标
+在达到配额限制时在账户之间自动切换。
 
-### Requirements
-- Detect quota exceeded errors
-- Automatically switch to the next available account
-- Maintain a priority order for account selection
-- Handle concurrent requests safely
+### 实现
+- 检测配额超出错误
+- 自动切换到下一个可用账户
+- 维护账户选择的优先级顺序
+- 安全处理并发请求
 
-### Implementation Plan
-- Implement quota error detection using existing patterns
-- Create account rotation logic with round-robin or priority-based selection
-- Ensure thread-safe account switching
-- Integrate with the API client to use the current active account
+### 实现方式
+- 实现配额错误检测
+- 创建具有智能账户选择的账户轮换逻辑
+- 与 API 客户端集成以使用当前活动账户
 
-## Future Considerations
+## 使用方法
 
-### Proxy Support for Accounts
-- Support using different proxy IPs for each account to prevent flagging
-- Configure proxy settings per account
-- Rotate IPs when needed
-- This is planned for future implementation, not part of the initial release
+### 添加账户
+```bash
+npm run auth:add <account-id>
+```
 
-## UI/UX Options
+### 列出账户
+```bash
+npm run auth:list
+```
 
-### Option 1: Web-based Management Interface
-- Temporary Flask server for account management
-- Web GUI to view accounts and request counts
-- Add accounts through web interface with QR code display
-- Simple and accessible but requires additional dependencies
+### 删除账户
+```bash
+npm run auth:remove <account-id>
+```
 
-### Option 2: Terminal-based TUI Application
-- Go-based TUI using libraries like Charm
-- Display accounts and request information in terminal
-- Add accounts through terminal interface
-- Consistent with existing QR code terminal experience
-- No additional server dependencies
+### 检查请求计数
+```bash
+npm run auth:counts
+```
 
-### Option 3: Command-line Interface
-- Extend existing npm commands
-- `npm run auth:list` - List accounts and request counts
-- `npm run auth:add` - Add new account
-- `npm run auth:remove` - Remove account
-- Simplest implementation but less user-friendly
+## 高级功能
+
+### 默认账户
+可以配置默认账户，代理将首先使用该账户：
+```bash
+# 在 .env 文件中
+DEFAULT_ACCOUNT=my-primary-account
+```
+
+### 账户健康状态
+系统跟踪账户健康状态，并在检测到故障时自动将其标记为失败，直到新一天开始。
+
+## 未来考虑
+
+### 账户的代理支持
+- 支持为每个账户使用不同的代理 IP 以防止标记
+- 为每个账户配置代理设置
+- 需要时轮换 IP
+- 这计划在未来实现
+
+## 实现细节
+
+多账户管理系统完全集成到现有的认证流程中，所有功能都可通过命令行界面使用。账户凭据安全地存储在本地，请求计数持久化存储以保持重启后的一致性。

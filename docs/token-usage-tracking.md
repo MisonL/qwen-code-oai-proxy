@@ -1,10 +1,10 @@
-# Token Usage Tracking
+# Token 使用追踪
 
-## Overview
+## 概述
 
-The Qwen OpenAI Proxy now includes comprehensive token usage tracking functionality that monitors and reports on input and output token consumption across all accounts and request types.
+Qwen OpenAI 代理现在包含全面的 token Usage Tracking功能，监控和报告所有账户和请求类型的输入和输出 token 消耗。
 
-## Features
+## 功能
 
 - **Daily Token Tracking**: Records input tokens (prompt) and output tokens (completion) for each day
 - **Multi-Account Support**: Aggregates token usage across all configured accounts
@@ -12,15 +12,15 @@ The Qwen OpenAI Proxy now includes comprehensive token usage tracking functional
 - **Persistent Storage**: Token usage data is stored locally in `~/.qwen/request_counts.json`
 - **Clean Terminal Display**: Beautiful table-based reporting with `npm run auth:tokens`
 
-## How It Works
+## 工作原理
 
-### Data Collection
+### 数据收集
 1. **Regular Requests**: Token usage is extracted from the `usage` field in API responses
 2. **Streaming Requests**: Token usage is captured from the final chunk of streaming responses
-3. **Daily Aggregation**: Usage is automatically grouped by date and account
+3. **Daily Aggregation**: 使用 is automatically grouped by date and account
 
-### Data Storage
-Token usage data is stored in the existing `request_counts.json` file alongside request counts:
+### 数据存储
+Token 使用数据与请求计数一起存储在现有的 `request_counts.json` 文件中：
 ```json
 {
   "lastResetDate": "2025-08-22",
@@ -37,11 +37,11 @@ Token usage data is stored in the existing `request_counts.json` file alongside 
 }
 ```
 
-## Usage
+## 使用
 
 ### View Token Usage Report
 
-You can use either of these commands to view token usage reports:
+您可以使用以下任一命令查看 token usage report：
 
 ```bash
 npm run auth:tokens
@@ -53,12 +53,12 @@ or
 npm run tokens
 ```
 
-Both commands display a clean table showing:
-- Daily input tokens, output tokens, and totals
-- Overall lifetime totals
-- Total request count
+两个命令都显示一个清晰的表格，显示：
+- 每日输入 token、输出 token 和总计
+- 总体生命周期总计
+- 总请求计数
 
-### Example Output
+### 示例输出
 ```
 📊 Qwen Token Usage Report
 ═══════════════════════════════════════════════════════════════════════════════
@@ -76,20 +76,20 @@ Both commands display a clean table showing:
 Total Requests: 127
 ```
 
-## Technical Implementation
+## 技术实现
 
-### Core Components
+### 核心组件
 - **QwenAPI Class**: Enhanced with token tracking methods
 - **tokens.js**: Terminal display script with table formatting
 - **cli-table3**: npm package for beautiful terminal tables
 
-### Key Methods
-- `recordTokenUsage(accountId, inputTokens, outputTokens)`: Records daily token usage
+### 关键方法
+- `recordToken使用(accountId, inputTokens, outputTokens)`: Records daily token usage
 - `loadRequestCounts()` / `saveRequestCounts()`: Handle persistent storage
-- Daily aggregation automatically combines data from all accounts
+- 每日聚合自动合并所有账户的数据
 
-## Dependencies
+## 依赖项
 - `cli-table3`: Terminal table formatting (automatically installed)
 
-## Data Privacy
-All token usage data is stored locally and never transmitted externally. The system only tracks usage statistics for your own monitoring and budgeting purposes.
+## 数据隐私
+所有 token usage data本地存储，从不对外传输。系统仅追踪使用统计以供您自己的监控和预算目的。

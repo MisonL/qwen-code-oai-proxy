@@ -1,30 +1,30 @@
-# Streaming in Qwen OpenAI-Compatible Proxy
+# Qwen OpenAI 兼容代理中的流式传输
 
-This document explains how the proxy server implements streaming responses from the Qwen API.
+本文档说明代理服务器如何实现来自 Qwen API 的流式响应。
 
-## Overview
+## 概述
 
-Streaming is a critical feature for large language models as it allows the user to see the response as it's being generated, rather than waiting for the entire response to complete. The proxy server has a robust implementation of streaming that can be enabled or disabled through configuration.
+流式传输是大型语言模型的关键功能，因为它允许用户在生成响应时看到它，而不是等待整个响应完成。代理服务器具有强大的流式传输实现，可以通过配置启用或禁用。
 
-By default, streaming is disabled. To enable streaming and allow streaming responses, set the `STREAM=true` environment variable.
+默认情况下，流式传输被禁用。要启用流式传输并允许流式响应，请设置 `STREAM=true` 环境变量。
 
-When streaming is disabled, even client requests that specify `stream: true` will receive a complete response in a single payload rather than a stream of chunks.
+当流式传输被禁用时，即使是指定 `stream: true` 的客户端请求也会在单个负载中接收完整的响应，而不是块流。
 
-## How It Works
+## 工作原理
 
 1.  **Client Request**: When a client makes a request to the `/v1/chat/completions` endpoint, the server checks if streaming is both requested by the client (`stream: true`) and enabled in the configuration.
 
-2.  **Configuration Check**: The server checks the `STREAM` environment variable. If it's set to `false`, all responses will be non-streaming regardless of the client's request.
+2.  **配置检查**: The server checks the `STREAM` environment variable. If it's set to `false`, all responses will be non-streaming regardless of the client's request.
 
 3.  **Streaming Path**: If streaming is enabled and requested, the server makes a streaming request to the Qwen API and forwards the chunks to the client as Server-Sent Events.
 
 4.  **Non-Streaming Path**: If streaming is disabled or not requested, the server makes a regular request to the Qwen API and returns the complete response to the client.
 
-## Key Code Snippets
+## 关键代码片段
 
-### Configuration Check
+### 配置检查
 
-The server checks both the client request and environment configuration:
+服务器检查客户端请求和环境配置：
 
 ```javascript
 // In src/index.js
@@ -41,9 +41,9 @@ if (isStreaming) {
 }
 ```
 
-### Environment Configuration
+### 环境配置
 
-The streaming behavior is controlled by the `STREAM` environment variable:
+流式行为由 `STREAM` 环境变量控制：
 
 ```javascript
 // In src/config.js
@@ -51,4 +51,4 @@ The streaming behavior is controlled by the `STREAM` environment variable:
 stream: process.env.STREAM === 'true', // Disable streaming by default, enable only if STREAM=true
 ```
 
-This approach allows users to easily toggle streaming behavior without modifying code.
+这种方法允许用户轻松切换流式行为而无需修改代码。

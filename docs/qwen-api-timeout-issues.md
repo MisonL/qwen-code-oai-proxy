@@ -1,23 +1,23 @@
-# Qwen API Timeout and Streaming Issues
+# Qwen API 超时和流式传输问题
 
-## Overview
+## 概述
 
-This document analyzes potential timeout and streaming issues that may occur when using the Qwen API through the OpenAI-compatible proxy. The information is based on analysis of both the proxy implementation and the qwen-code CLI tool source code.
+本文档分析通过 OpenAI 兼容代理使用 Qwen API 时可能出现的潜在超时和流式传输问题。信息基于对代理实现和 qwen-code CLI 工具源代码的分析。
 
-## Known Issues
+## 已知问题
 
-### 504 Gateway Timeout Errors
+### 504 网关超时错误
 
-The error message you've encountered:
+您遇到的错误消息：
 ```
 API Error (500 {"error":{"message":"Error from provider: {\"error\":{\"message\":\"Qwen API error: 504 \\\"stream timeout\\\"\",\"type\":\"internal_server_error\"}}Error: Error from provider: {\"error\":{\"message\":\"Qwen API error: 504 \\\"stream timeout\\\"\",\"type\":\"internal_server_error\"}}
 ```
 
-This indicates that the Qwen API is experiencing timeout issues on their backend, particularly during streaming operations.
+这表明 Qwen API 在其后端遇到超时问题，特别是在流式传输操作期间。
 
-## Root Cause Analysis
+## 根本原因分析
 
-Based on the source code analysis:
+基于源代码分析：
 
 1. **Timeout Configuration**: The proxy sets a 5-minute timeout for API requests (300,000 ms) in the chat completions endpoint.
 
@@ -27,34 +27,34 @@ Based on the source code analysis:
 
 4. **Token Expiration Issues**: Expired access tokens were causing authentication failures that manifested as 504 Gateway Timeout errors from Qwen's API. The proxy was not validating token expiration before use.
 
-## Solution Implementation
+## 解决方案实现
 
-### Token Validation and Refresh
+### 令牌验证和刷新
 
-The proxy has been enhanced with robust token management that matches the official qwen-code CLI implementation:
+代理已通过与官方 qwen-code CLI 实现匹配的强大令牌管理增强：
 
 1. **Automatic Token Validation**: Before each API request, the proxy now checks if the access token is still valid using the same logic as qwen-code.
 
 2. **Proactive Token Refresh**: Tokens are automatically refreshed 30 seconds before they expire, preventing authentication failures.
 
 3. **Error-Based Retry Logic**: When 504 Gateway Timeout errors occur (which were often caused by expired tokens), the proxy now:
-   - Detects the authentication error
-   - Automatically refreshes the access token
-   - Retries the request with the new token
-   - Only fails if the retry also fails
+   - 检测认证错误
+   - 自动刷新访问令牌
+   - 使用新令牌重试请求
+   - 仅在重试也失败时才失败
 
 4. **Concurrent Request Handling**: Multiple simultaneous requests are handled efficiently using a `refreshPromise` pattern that prevents multiple simultaneous token refresh attempts.
 
-### Logging and Monitoring
+### 日志记录和监控
 
-The enhanced implementation provides detailed logging to help diagnose token-related issues:
+增强的实现提供详细日志以帮助诊断令牌相关问题：
 
 - **Token Status**: Shows when tokens are valid vs. when they need refreshing
 - **Refresh Operations**: Logs when token refresh starts and completes
 - **Retry Attempts**: Shows when auth errors trigger automatic retries
 - **Success/Failure**: Clear indication of whether retries succeed or fail
 
-### Benefits
+### 优势
 
 1. **Eliminates 504 Errors**: Most 504 Gateway Timeout errors caused by expired tokens are now resolved automatically.
 
@@ -64,9 +64,9 @@ The enhanced implementation provides detailed logging to help diagnose token-rel
 
 4. **Alignment with Official Tool**: Implementation now matches the robust token handling of the official qwen-code CLI.
 
-## Recommendations
+## 建议
 
-### For Proxy Users
+### 对代理用户
 
 1. **Reduce Input Size**: Large prompts are more likely to trigger timeouts. Try breaking large requests into smaller chunks.
 
@@ -74,7 +74,7 @@ The enhanced implementation provides detailed logging to help diagnose token-rel
 
 3. **Retry Logic**: Implement client-side retry logic for transient timeout errors.
 
-### For Proxy Configuration
+### 对代理配置
 
 1. **Adjust Timeout Settings**: Consider increasing the timeout value in the axios requests if your use case requires longer processing times.
 
@@ -82,15 +82,15 @@ The enhanced implementation provides detailed logging to help diagnose token-rel
 
 3. **Streaming Fallback**: Consider implementing fallback logic that switches from streaming to non-streaming mode when timeouts occur.
 
-## Implementation Notes
+## 实现说明
 
-The current proxy implementation in `src/qwen/api.js` has basic error handling that captures HTTP status codes and error responses. However, it could be enhanced to:
+src/qwen/api.js 中的当前代理实现有捕获 HTTP 状态码和错误响应的基本错误处理。然而，它可以增强为：
 
-1. Specifically detect and handle 504 Gateway Timeout errors
-2. Provide more informative error messages to users
-3. Implement retry logic for transient timeout issues
-4. Add configuration options for timeout values
+1. 专门检测和处理 504 网关超时错误
+2. 向用户提供更多错误信息
+3. 为临时超时问题实现重试逻辑
+4. 为超时值添加配置选项
 
-## Conclusion
+## 结论
 
-The 504 "stream timeout" errors are server-side issues from Qwen's API infrastructure. While the proxy cannot prevent these errors, it can be enhanced to handle them more gracefully and provide better guidance to users on how to work around them.
+504 "流式超时" 错误是来自 Qwen API 基础设施的服务器端问题。虽然代理无法防止这些错误，但可以增强它以更优雅地处理这些问题，并向用户提供更好的解决方法指导。

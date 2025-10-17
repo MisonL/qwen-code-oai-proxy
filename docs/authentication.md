@@ -1,39 +1,39 @@
-# Qwen Authentication
+# Qwen 认证
 
-This document explains how to authenticate with Qwen for use with the proxy server. The proxy server supports two methods for authentication: using the built-in authentication script or the official `qwen-code` CLI tool.
+本文档解释了如何与 Qwen 认证以供代理服务器使用。代理服务器支持两种认证方法：使用内置认证脚本或官方 `qwen-code` CLI 工具。
 
-## Overview
+## 概述
 
-The authentication system is built on the **OAuth 2.0 Device Authorization Flow**. This is a standard protocol that allows command-line interfaces (CLIs) and other input-constrained devices to obtain access tokens securely.
+认证系统基于 **OAuth 2.0 设备授权流程**。这是一种标准协议，允许命令行界面（CLI）和其他输入受限的设备安全地获取访问令牌。
 
-The proxy server now includes its own built-in authentication implementation based on the same OAuth 2.0 Device Authorization Flow used by the official `qwen-code` CLI tool.
+代理服务器现在包含其自己的内置认证实现，基于官方 `qwen-code` CLI 工具使用的相同 OAuth 2.0 设备授权流程。
 
-## Authentication Methods
+## 认证方法
 
-### Method 1: Built-in Authentication (Recommended)
+### 方法 1：内置认证（推荐）
 
-The proxy server now includes its own built-in authentication script that implements the OAuth 2.0 Device Authorization Flow:
+代理服务器现在包含其自己的内置认证脚本，实现 OAuth 2.0 设备授权流程：
 
-1. Run `npm run auth` in the project directory
-2. The script will automatically:
-   - Check for existing valid credentials
-   - Attempt to refresh expired credentials if found
-   - Initiate a new authentication flow if needed
-3. You'll be presented with a QR code and URL to authenticate
-4. Scan the QR code or visit the URL to complete authentication
-5. The credentials will be automatically saved to `~/.qwen/oauth_creds.json`
+1. 在项目目录中运行 `npm run auth`
+2. 脚本将自动：
+   - 检查现有有效凭据
+   - 如果找到则尝试刷新过期的凭据
+   - 如果需要则启动新的认证流程
+3. 您将看到一个 QR 码和 URL 以进行认证
+4. 扫描 QR 码或访问 URL 以完成认证
+5. 凭据将自动保存到 `~/.qwen/oauth_creds.json`
 
-### Method 2: Official qwen-code CLI Tool
+### 方法 2：官方 qwen-code CLI 工具
 
-You can also use the official `qwen-code` CLI tool from [QwenLM/qwen-code](https://github.com/QwenLM/qwen-code):
+您也可以使用来自 [QwenLM/qwen-code](https://github.com/QwenLM/qwen-code) 的官方 `qwen-code` CLI 工具：
 
-1. Install the `qwen-code` CLI tool
-2. Run `qwen-code auth` to authenticate with your Qwen account
-3. The credentials will be saved to `~/.qwen/oauth_creds.json`
+1. 安装 `qwen-code` CLI 工具
+2. 运行 `qwen-code auth` 与您的 Qwen 账户认证
+3. 凭据将保存到 `~/.qwen/oauth_creds.json`
 
-## Authentication Flow
+## 认证流程
 
-The OAuth 2.0 Device Authorization Flow works as follows:
+OAuth 2.0 设备授权流程工作如下：
 
 1.  **Initiation**: The client generates a **PKCE (Proof Key for Code Exchange)** pair, which consists of a `code_verifier` and a `code_challenge`. This is a security measure to prevent authorization code interception attacks.
 
@@ -47,29 +47,29 @@ The OAuth 2.0 Device Authorization Flow works as follows:
 
 6.  **Credential Caching**: The client saves these tokens to a file at `~/.qwen/oauth_creds.json`.
 
-## Key Implementation Details
+## 关键实现细节
 
-### Endpoints and Configuration
+### 端点和配置
 
 *   **Device Code Endpoint**: `https://chat.qwen.ai/api/v1/oauth2/device/code`
 *   **Token Endpoint**: `https://chat.qwen.ai/api/v1/oauth2/token`
 *   **Client ID**: `f0304373b74a44d2b584a3fb70ca9e56`
 *   **Scope**: `openid profile email model.completion`
 
-These constants are defined at the top of the `qwenOAuth2.ts` file.
+这些常量在 `src/qwen/auth.js` 文件中定义。
 
-### Token Storage
+### 令牌存储
 
-*   **Location**: The `getQwenCachedCredentialPath` function constructs the path to the credentials file: `~/.qwen/oauth_creds.json`.
+*   **Location**: The credentials are stored at `~/.qwen/oauth_creds.json`.
 *   **Functions**:
-    *   `cacheQwenCredentials`: Writes the tokens to the file.
-    *   `loadCachedQwenCredentials`: Reads the tokens from the file.
-    *   `clearQwenCredentials`: Deletes the file to log the user out.
+    *   `saveCredentials`: 将令牌写入文件。
+    *   `loadCredentials`: 从文件中读取令牌。
+    *   `QwenAuthManager` 类处理所有认证相关的操作。
 
-### Token Refresh
+### 令牌刷新
 
 *   **Trigger**: The `isTokenValid` method checks if the current `access_token` will expire within the next 30 seconds.
 *   **Mechanism**: If the token is close to expiring, the `refreshAccessToken` method is called. It sends the `refresh_token` to the token endpoint to get a new `access_token`.
 *   **Automatic Refresh**: This process is handled automatically by the `getAccessToken` method, ensuring that the user always has a valid token without needing to re-authenticate manually.
 
-This robust implementation of the OAuth 2.0 Device Flow is what allows the proxy server to seamlessly and securely authenticate with the Qwen API on the user's behalf.
+OAuth 2.0 设备流程的这种强大实现使代理服务器能够代表用户无缝且安全地与 Qwen API 认证。

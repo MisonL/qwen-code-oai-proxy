@@ -4,10 +4,12 @@ services:
   qwen-proxy:
     build: .
     ports:
-      - "${PORT:-8080}:${PORT:-8080}"
+      - "${PORT:-8765}:${PORT:-8765}"
+    volumes:
+      - ~/.qwen:/root/.qwen  # 持久化认证凭据
     environment:
       - NODE_ENV=production
-      - PORT=${PORT:-8080}
+      - PORT=${PORT:-8765}
       - HOST=${HOST:-0.0.0.0}
       - DEBUG_LOG=${DEBUG_LOG:-false}
       - LOG_FILE_LIMIT=${LOG_FILE_LIMIT:-20}
@@ -17,7 +19,7 @@ services:
     
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:${PORT:-8765}/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -1,58 +1,59 @@
-# Qwen Project Context for AI Interactions
+# Qwen 项目上下文用于 AI 交互
 
-## Project Overview
- must first read the ./docs/README.md To undertsadn the goal of the porject . the qwen-code cli dir is ./qwen-code . its being added to git ignore to not push in github. 
-This project is a Qwen-to-OpenAI API proxy server that allows users to interact with Qwen's API using OpenAI-compatible endpoints. Key features include:
-- Multi-account support with automatic rotation to handle request quotas
-- QR code authentication flow
-- Streaming response support
-- Token counting and management
-- Detailed debug logging capabilities
+## 项目概述
+必须首先阅读 ./docs/README.md 以了解项目目标。qwen-code cli 目录是 ./qwen-code。它被添加到 git ignore 中以避免推送到 github。
+本项目是一个 Qwen 到 OpenAI/Anthropic API 代理服务器，允许用户使用 OpenAI 兼容端点或 Anthropic 兼容端点（特别是为 Claude Code 优化）与 Qwen 的 API 进行交互。主要功能包括：
+- 多账户支持，具有自动轮换以处理请求配额
+- QR 码认证流程
+- Claude Code 优化的 Anthropic API 支持
+- 流式响应支持
+- Token 计数和管理
+- 详细的调试日志功能
 
-## Documentation Practices
-- All new features should be documented in the `docs/` folder with dedicated markdown files
-- Update existing documentation when modifying existing features
-- Key user-facing changes should also be reflected in the main `README.md`
-- Architecture and implementation details should be captured in `docs/codebase_analysis.md`
+## 文档实践
+- 所有新功能应使用专用 markdown 文件记录在 `docs/` 文件夹中
+- 修改现有功能时更新现有文档
+- 关键面向用户的变化也应该反映在主 `README.md` 中
+- 架构和实现细节应记录在 `docs/codebase_analysis.md` 中
 
-## Changelog Practices
-- Maintain a high-level feature changelog in the commit messages
-- For detailed technical changes, run these commands to analyze recent modifications:
+## 变更日志实践
+- 在提交消息中维护高级功能变更日志
+- 对于详细的技术更改，运行这些命令来分析最近的修改：
 
 ```bash
-# Current repository status
+# 当前仓库状态
 git status --porcelain
 
-# Recent commits (last 10)
+# 最近的提交（最后 10 个）
 git log --oneline -10
 
-# Detailed recent changes
-git log --since="1 week ago" --pretty=format:"%h - %an, %ar : %s" --stat
+# 详细的最近更改
+git log --since="1 周前" --pretty=format:"%h - %an, %ar : %s" --stat
 
-# Recently changed files
+# 最近更改的文件
 git diff HEAD~5 --name-only | head -20
 
-# New files added
+# 新增的文件
 git diff --name-status HEAD~10 | grep "^A" | head -15
 
-# Deleted files
+# 删除的文件
 git diff --name-status HEAD~10 | grep "^D" | head -10
 
-# Modified core files
+# 修改的核心文件
 git diff --name-status HEAD~10 | grep "^M" | grep -E "(package\.json|README|config|main|index|app)" | head -10
 ```
 
-## Recent Project State Notes
-- Documentation is generally well-maintained with dedicated files for major features
-- Recent development has focused on multi-account management and streaming improvements
-- The project has a good test suite with both simple and complex test scripts
-- Configuration is handled through environment variables with example configurations provided
-- Authentication has been enhanced with QR code support and account management commands
+## 最近项目状态说明
+- 文档通常维护良好，主要功能都有专用文件
+- 最近的开发重点是多账户管理和流式传输改进
+- 项目有良好的测试套件，包含简单和复杂的测试脚本
+- 配置通过环境变量处理，并提供示例配置
+- 认证已通过 QR 码支持和账户管理命令得到增强
 
-## Project Structure
-- `src/` - Main source code for the proxy server
-- `docs/` - Detailed documentation for features
-- `authenticate.js` - CLI tool for account management
-- `src/qwen/` - Qwen-specific API and authentication logic
-- `src/utils/` - Utility functions like logging and token counting
-- `qwen-code/`  this is the dir for the qwen-code cli souce code . read this when user asks to look into the source code of qwen cli . 
+## 项目结构
+- `src/` - 代理服务器的主源代码
+- `docs/` - 功能的详细文档
+- `authenticate.js` - 账户管理的 CLI 工具
+- `src/qwen/` - Qwen 特定的 API 和认证逻辑
+- `src/utils/` - 实用功能，如日志记录和 token 计数
+- `qwen-code/` - 这是 qwen-code cli 源代码的目录。当用户要求查看 qwen cli 的源代码时，请阅读此目录。

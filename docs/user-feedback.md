@@ -1,10 +1,10 @@
-# User Feedback on Qwen Model Token Limits
+# 用户对 Qwen 模型 Token 限制的反馈
 
-## Observed Behavior
+## 观察到的行为
 
-Through independent use of both the proxy and the qwen-code CLI tool, it has been found that after using approximately 130,000 to 150,000 tokens:
+通过独立使用代理和 qwen-code CLI 工具，发现使用大约 130,000 到 150,000 个 token 后：
 
-- The qwen-code CLI gets stuck and doesn't respond
-- The proxy shows 504 Gateway Timeout streaming issues
+- qwen-code CLI 卡住且无响应
+- 代理显示 504 网关超时流式传输问题
 
-This behavior indicates a practical limit on context length that users should be aware of when working with large contexts through either interface.
+此行为表明上下文长度的实际限制，用户在通过任一界面处理大上下文时应了解此限制。

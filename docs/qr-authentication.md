@@ -1,34 +1,34 @@
-# QR Code Authentication
+# QR 码认证
 
-The proxy server now includes a built-in authentication system with QR code support, making it easier than ever to authenticate with Qwen.
+代理服务器现在包含一个带有 QR 码支持的内置认证系统，使与 Qwen 的认证比以往任何时候都更容易。
 
-## How It Works
+## 工作原理
 
-The built-in authentication script implements the OAuth 2.0 Device Authorization Flow with the following features:
+内置认证脚本实现 OAuth 2.0 设备授权流程，具有以下功能：
 
 1. **Automatic Credential Management**: Checks for existing credentials and attempts to refresh them before initiating a new flow
 2. **QR Code Generation**: Automatically generates and displays a QR code for quick mobile authentication
 3. **Browser Integration**: Attempts to automatically open the authentication URL in your default browser
 4. **Real-time Feedback**: Provides clear status updates during the authentication process
 
-## Using QR Code Authentication
+## 使用 QR 码认证
 
-To authenticate using the built-in QR code system:
+使用内置 QR 码系统进行认证：
 
 ```bash
 npm run auth
 ```
 
-The authentication script will:
+认证脚本将：
 
-1. Check for existing credentials in `~/.qwen/oauth_creds.json`
-2. If valid credentials are found, the script will exit with a success message
-3. If expired credentials are found, it will attempt to refresh them automatically
-4. If no credentials exist or refresh fails, it will initiate a new authentication flow
+1. 检查 `~/.qwen/oauth_creds.json` 中的现有凭据
+2. 如果找到有效凭据，脚本将以成功消息退出
+3. 如果找到过期凭据，它将尝试自动刷新它们
+4. 如果凭据不存在或刷新失败，它将启动新的认证流程
 
-## Authentication Flow
+## 认证流程
 
-When a new authentication flow is initiated, you'll see output similar to:
+启动新的认证流程时，您将看到类似以下的输出：
 
 ```
 Starting Qwen authentication flow...
@@ -59,25 +59,25 @@ User code: XXXX-YYYY
 Browser opened automatically. If not, please visit the URL above.
 ```
 
-## Authentication Options
+## 认证选项
 
-You have three ways to complete the authentication:
+您有三种方式完成认证：
 
 1. **QR Code Scanning**: Use your mobile device to scan the QR code displayed in the terminal
 2. **Manual URL Entry**: Visit the displayed URL in any browser and enter the user code
 3. **Automatic Browser Opening**: If supported, the script will automatically open your default browser to the authentication page
 
-## Credential Storage
+## 凭据存储
 
-Credentials are stored in the same location used by the official `qwen-code` CLI tool:
+凭据存储在官方 `qwen-code` CLI 工具使用的相同位置：
 
 - **Location**: `~/.qwen/oauth_creds.json`
 - **Format**: Standard OAuth 2.0 token format with access token, refresh token, and expiration information
 - **Security**: Tokens are stored locally and never transmitted to any third-party servers
 
-## Benefits
+## 优势
 
-The built-in QR code authentication system provides several advantages:
+内置 QR 码认证系统提供几个优势：
 
 - **No External Dependencies**: Authenticate without installing additional CLI tools
 - **Mobile-Friendly**: QR codes make it easy to authenticate from your mobile device
@@ -85,13 +85,13 @@ The built-in QR code authentication system provides several advantages:
 - **User-Friendly**: Clear instructions and real-time feedback throughout the process
 - **Cross-Platform**: Works on all platforms that support terminal QR code display
 
-## Troubleshooting
+## 故障排除
 
-If you encounter issues with the authentication process:
+如果在认证过程中遇到问题：
 
 1. **QR Code Not Displaying**: Ensure your terminal supports Unicode characters
 2. **Browser Not Opening**: Manually visit the displayed URL in your browser
 3. **Authentication Timeout**: Restart the authentication process with `npm run auth`
 4. **Existing Credentials Issues**: Delete `~/.qwen/oauth_creds.json` and re-authenticate
 
-For more detailed information about the OAuth 2.0 Device Authorization Flow, see the [Authentication documentation](./authentication.md).
+有关 OAuth 2.0 设备授权流程的详细信息，请参见 [认证文档](./authentication.md)。

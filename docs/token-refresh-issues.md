@@ -1,12 +1,12 @@
-# Token Refresh Issues and Solutions
+# Token 刷新问题和解决方案
 
-## Problem Description
+## 问题描述
 
-The Qwen OpenAI-Compatible Proxy was experiencing intermittent 504 Gateway Timeout errors that would resolve temporarily after restarting the proxy server. This document explains the root cause and the solution.
+Qwen OpenAI 兼容代理遇到了间歇性 504 网关超时错误，在重启代理服务器后会暂时解决。本文档说明根本原因和解决方案。
 
-## Root Cause Analysis
+## 根本原因分析
 
-### Current Implementation Issues
+### 当前实现问题
 
 1. **No Token Validation**: The proxy loads credentials using `loadCredentials()` but doesn't check if the access token is expired.
 
@@ -16,19 +16,19 @@ The Qwen OpenAI-Compatible Proxy was experiencing intermittent 504 Gateway Timeo
 
 4. **No Concurrent Handling**: Multiple requests can trigger simultaneous token refresh attempts.
 
-### Why Rebooting Fixes the Issue
+### 为什么重启修复问题
 
-When the proxy is restarted:
-- Fresh credentials are loaded from the file system
-- Tokens are likely still valid (if recently refreshed by qwen-code CLI)
-- All problematic internal state is cleared
-- HTTP connection pools are reset
+代理重启时：
+- 从文件系统加载新凭据
+- 令牌可能仍然有效（如果最近由 qwen-code CLI 刷新）
+- 所有有问题的内部状态被清除
+- HTTP 连接池被重置
 
-However, this is only a temporary fix as tokens will eventually expire again.
+然而，这只是临时修复，因为令牌最终会再次过期。
 
-## How qwen-code CLI Handles Token Refresh
+## qwen-code CLI 如何处理令牌刷新
 
-The official qwen-code CLI implements robust token management:
+官方 qwen-code CLI 实现强大的令牌管理：
 
 1. **Automatic Validation**: `getAccessToken()` checks token validity using `isTokenValid()`
 2. **Proactive Refresh**: Refreshes tokens 30 seconds before expiration
@@ -36,46 +36,46 @@ The official qwen-code CLI implements robust token management:
 4. **Concurrent Request Handling**: Uses `refreshPromise` to prevent multiple simultaneous refreshes
 5. **Retry Logic**: Automatically retries failed requests once after token refresh
 
-## Solution Implementation
+## 解决方案实现
 
-### Enhanced Auth Manager
+### 增强的认证管理器
 
-The `src/qwen/auth.js` file was updated with:
+src/qwen/auth.js 文件已更新：
 
 1. **Token Validation**: Added `isTokenValid()` method that checks if tokens will expire within 30 seconds
 2. **Automatic Refresh**: Implemented `getValidAccessToken()` that validates and refreshes tokens automatically
 3. **Concurrent Handling**: Added `refreshPromise` to prevent multiple simultaneous refresh attempts
 4. **Error Handling**: Improved error messages and logging for token operations
 
-### Enhanced API Client
+### 增强的 API 客户端
 
-The `src/qwen/api.js` file was updated with:
+src/qwen/api.js 文件已更新：
 
 1. **Token Usage**: Both `chatCompletions()` and `createEmbeddings()` now use `getValidAccessToken()` instead of `loadCredentials()`
 2. **Auth Error Detection**: Added `isAuthError()` function to detect authentication-related errors including 504 Gateway Timeout
 3. **Retry Logic**: Implemented automatic retry mechanism for auth errors
 4. **Logging**: Added comprehensive logging for token operations and retry attempts
 
-### Key Features
+### 关键功能
 
-**Automatic Token Management:**
+**自动令牌管理：**
 ```
-Before Request → Check Token Validity → Refresh if Needed → Make API Call
-```
-
-**Error Recovery:**
-```
-API Error → Detect Auth Error → Refresh Token → Retry Request → Success/Fail
+请求前 → 检查令牌有效性 → 如需刷新 → 发起 API 调用
 ```
 
-**Concurrent Handling:**
+**错误恢复：**
 ```
-Multiple Requests → Single Refresh Operation → All Wait for Same Result
+API 错误 → 检测认证错误 → 刷新令牌 → 重试请求 → 成功/失败
 ```
 
-### Logging Output
+**并发处理：**
+```
+多个请求 → 单个刷新操作 → 全部等待相同结果
+```
 
-The enhanced implementation provides clear terminal output:
+### 日志输出
+
+增强的实现提供清晰的终端输出：
 
 - **🟡 "Refreshing Qwen access token..."** - Token refresh started
 - **✅ "Qwen access token refreshed successfully"** - Token refresh completed
@@ -86,7 +86,7 @@ The enhanced implementation provides clear terminal output:
 - **✅ "Request succeeded after token refresh"** - Retry successful
 - **❌ "Request failed even after token refresh"** - Retry failed
 
-### Benefits
+### 优势
 
 - **Eliminates 504 Errors**: Most 504 Gateway Timeout errors caused by expired tokens are now resolved automatically
 - **Improved Reliability**: No more need to manually restart the proxy when tokens expire
@@ -94,13 +94,13 @@ The enhanced implementation provides clear terminal output:
 - **Alignment with Official Tool**: Implementation now matches the robust token handling of the official qwen-code CLI
 - **Transparent Operation**: Clear logging shows what's happening with token management
 
-## Testing the Solution
+## 测试解决方案
 
-The implementation has been completed and tested. After restarting the proxy, you should see:
+实现已完成并测试。重启代理后，您应该看到：
 
 1. **Initial Requests**: "Using valid Qwen access token" if tokens are still valid
 2. **Token Expiration**: Automatic refresh with clear logging messages
 3. **Error Recovery**: Auth errors automatically trigger refresh and retry
 4. **No Manual Intervention**: 504 errors should be resolved automatically
 
-The solution has been verified to eliminate the 504 timeout issues caused by expired tokens.
+该解决方案已验证可消除由过期令牌引起的 504 超时问题。
