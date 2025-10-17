@@ -45,8 +45,8 @@ function anthropicToQwenConverter(anthropicReq) {
     stream: anthropicReq.stream || false
   };
   
-  // 如果请求的模型不是 Qwen 模型，确保使用默认模型
-  if (!qwenReq.model.startsWith('qwen')) {
+  // 如果请求的模型不是 Qwen 模型也不是预定义的特殊模型（如 vision-model），则使用默认模型
+  if (!qwenReq.model.startsWith('qwen') && qwenReq.model !== 'vision-model') {
     qwenReq.model = 'qwen3-coder-plus'; // 默认使用 Qwen 模型
   }
   

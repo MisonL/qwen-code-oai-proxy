@@ -1034,4 +1034,4 @@ class QwenAPI {
   }
 }
 
-module.exports = { QwenAPI };
+module.exports = { QwenAPI, processMessagesForVision, isAuthError, isQuotaExceededError };

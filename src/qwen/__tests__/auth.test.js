@@ -3,14 +3,30 @@
  * 测试 Qwen OAuth 认证流程和凭证管理功能
  */
 
-const { QwenAuthManager } = require('../../src/qwen/auth.js');
+const { QwenAuthManager } = require('../auth.js');
 const path = require('path');
-jest.mock('fs');
+const { fetch } = require('undici');
+
+// Mock fs 模块，包含 promises 对象和其方法
+jest.mock('fs', () => ({
+  ...jest.requireActual('fs'),
+  promises: {
+    readdir: jest.fn(),
+    readFile: jest.fn(),
+    writeFile: jest.fn(),
+    unlink: jest.fn(),
+    access: jest.fn(),
+  },
+  readdir: jest.fn(),
+  readFile: jest.fn(),
+  writeFile: jest.fn(),
+  unlink: jest.fn(),
+  access: jest.fn(),
+}));
+
 jest.mock('undici');
 jest.mock('crypto');
-
 const { promises: fs } = require('fs');
-const { fetch } = require('undici');
 
 describe('QwenAuthManager', () => {
   let authManager;
@@ -40,8 +56,10 @@ describe('QwenAuthManager', () => {
     });
 
     it('should return true for valid credentials', () => {
+      // 确保时间在未来超过TOKEN_REFRESH_BUFFER（30秒）
       const credentials = {
-        expiry_date: Date.now() + 100000 // 100 seconds in the future
+        access_token: 'token',
+        expiry_date: Date.now() + 60000 // 60 seconds in the future (more than 30s buffer)
       };
       expect(authManager.isTokenValid(credentials)).toBe(true);
     });
@@ -84,11 +102,11 @@ describe('QwenAuthManager', () => {
       fs.readFile
         .mockResolvedValueOnce(JSON.stringify({ 
           access_token: 'token1', 
-          expiry_date: Date.now() + 100000 
+          expiry_date: Date.now() + 60000 
         })) // for account1
         .mockResolvedValueOnce(JSON.stringify({ 
           access_token: 'token2', 
-          expiry_date: Date.now() + 100000 
+          expiry_date: Date.now() + 60000 
         })); // for account2
 
       const result = await authManager.loadAllAccounts();
@@ -115,7 +133,11 @@ describe('QwenAuthManager', () => {
 
   describe('addAccount', () => {
     it('should add an account and save credentials', async () => {
-      const credentials = { access_token: 'new_token', expiry_date: Date.now() + 100000 };
+      const credentials = { 
+        access_token: 'new_token', 
+        refresh_token: 'refresh_token',
+        expiry_date: Date.now() + 60000 
+      };
       const accountId = 'new-account';
       
       const saveSpy = jest.spyOn(authManager, 'saveCredentials');

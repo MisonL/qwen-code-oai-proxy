@@ -3,19 +3,24 @@
  * 测试 Qwen API 客户端的功能，包括认证、账户管理和错误处理
  */
 
-const { QwenAPI } = require('../../src/qwen/api.js');
+const { QwenAPI } = require('../api.js');
 jest.mock('axios');
 jest.mock('fs');
-jest.mock('../../src/qwen/auth.js');
+jest.mock('path');
+jest.mock('../auth.js');
 
 const axios = require('axios');
 const { promises: fs } = require('fs');
-const { QwenAuthManager } = require('../../src/qwen/auth.js');
+const { QwenAuthManager } = require('../auth.js');
+const path = require('path');
 
 describe('QwenAPI', () => {
   let qwenAPI;
 
   beforeEach(() => {
+    // Mock path.join to return a simple string to prevent errors during initialization
+    path.join.mockImplementation((...args) => args.join('/'));
+    
     qwenAPI = new QwenAPI();
     jest.clearAllMocks();
   });
@@ -116,7 +121,8 @@ describe('QwenAPI', () => {
       const messages = [{ role: 'user', content: 'Hello' }];
       const model = 'qwen3-coder-plus';
       
-      const result = require('../../src/qwen/api.js').processMessagesForVision(messages, model);
+      const { processMessagesForVision } = require('../api.js');
+      const result = processMessagesForVision(messages, model);
       
       expect(result).toEqual(messages);
     });
@@ -125,12 +131,59 @@ describe('QwenAPI', () => {
       const messages = [{ role: 'user', content: 'Check this image: https://example.com/image.jpg' }];
       const model = 'vision-model';
       
-      const result = require('../../src/qwen/api.js').processMessagesForVision(messages, model);
+      const { processMessagesForVision } = require('../api.js');
+      const result = processMessagesForVision(messages, model);
       
       // 结果应包含原始文本内容和image_url部分
       expect(result[0].content).toBeInstanceOf(Array);
       expect(result[0].content[0].type).toBe('text');
       expect(result[0].content[1].type).toBe('image_url');
+    });
+  });
+
+  describe('isAuthError', () => {
+    it('should identify authentication errors', () => {
+      const authError401 = { response: { status: 401 } };
+      const networkError = { message: 'Network error' };
+      const authErrorToken = { message: 'invalid access token' }; // 必须是小写
+      const authErrorForbidden = { response: { status: 403 } };
+      const authErrorUnauthorized = { message: 'unauthorized access' };
+      const authErrorExpired = { message: 'token expired' }; // 必须是小写
+      const authErrorGateway = { response: { status: 504 } };
+      const invalidApiKey = { message: 'invalid api key' }; // 必须是小写
+      const invalidAccessToken = { message: 'invalid access token' }; // 必须是小写
+      const accessDenied = { message: 'access denied' }; // 必须是小写
+      
+      const { isAuthError } = require('../api.js');
+      
+      expect(isAuthError(authError401)).toBe(true);
+      expect(isAuthError(networkError)).toBe(false);
+      expect(isAuthError(authErrorToken)).toBe(true);
+      expect(isAuthError(authErrorForbidden)).toBe(true);
+      expect(isAuthError(authErrorUnauthorized)).toBe(true);
+      expect(isAuthError(authErrorExpired)).toBe(true);
+      expect(isAuthError(authErrorGateway)).toBe(true);
+      expect(isAuthError(invalidApiKey)).toBe(true);
+      expect(isAuthError(invalidAccessToken)).toBe(true);
+      expect(isAuthError(accessDenied)).toBe(true);
+    });
+  });
+
+  describe('isQuotaExceededError', () => {
+    it('should identify quota exceeded errors', () => {
+      const quotaError = { response: { status: 429 } };
+      const errorMessage = { message: 'quota exceeded' }; // 必须同时包含 'quota' 和 'exceeded'
+      const insufficientQuotaError = { message: 'insufficient_quota' }; // 必须包含下划线
+      const normalError = { message: 'Normal error' };
+      const quotaExceededError = { message: 'free allocated quota exceeded' };
+      
+      const { isQuotaExceededError } = require('../api.js');
+      
+      expect(isQuotaExceededError(quotaError)).toBe(true);
+      expect(isQuotaExceededError(errorMessage)).toBe(true);
+      expect(isQuotaExceededError(insufficientQuotaError)).toBe(true);
+      expect(isQuotaExceededError(quotaExceededError)).toBe(true);
+      expect(isQuotaExceededError(normalError)).toBe(false);
     });
   });
 });
