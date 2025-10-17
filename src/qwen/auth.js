@@ -1,3 +1,8 @@
+/**
+ * Qwen 认证管理器
+ * 处理 Qwen OAuth 认证流程和凭证管理
+ */
+
 const path = require('path');
 const { promises: fs } = require('fs');
 const { fetch } = require('undici');
@@ -5,13 +10,13 @@ const crypto = require('crypto');
 const open = require('open');
 const qrcode = require('qrcode-terminal');
 
-// File System Configuration
+// 文件系统配置
 const QWEN_DIR = '.qwen';
 const QWEN_CREDENTIAL_FILENAME = 'oauth_creds.json';
 const QWEN_MULTI_ACCOUNT_PREFIX = 'oauth_creds_';
 const QWEN_MULTI_ACCOUNT_SUFFIX = '.json';
 
-// OAuth Configuration (from qwen-code analysis)
+// OAuth配置（来自qwen-code分析）
 const QWEN_OAUTH_BASE_URL = 'https://chat.qwen.ai';
 const QWEN_OAUTH_DEVICE_CODE_ENDPOINT = `${QWEN_OAUTH_BASE_URL}/api/v1/oauth2/device/code`;
 const QWEN_OAUTH_TOKEN_ENDPOINT = `${QWEN_OAUTH_BASE_URL}/api/v1/oauth2/token`;
@@ -60,7 +65,7 @@ class QwenAuthManager {
   }
 
   async loadCredentials() {
-    // Check if QWEN_CODE_AUTH_USE is disabled
+    // 检查QWEN_CODE_AUTH_USE是否已禁用
     const config = require('../config.js');
     if (config.qwenCodeAuthUse === false) {
       return null;
@@ -84,26 +89,26 @@ class QwenAuthManager {
    */
   async loadAllAccounts() {
     try {
-      // Clear existing accounts
+      // 清除现有账户
       this.accounts.clear();
       
-      // Read directory to find all credential files
+      // 读取目录以查找所有凭证文件
       const files = await fs.readdir(this.qwenDir);
       
-      // Filter for multi-account credential files
+      // 过滤多账户凭证文件
       const accountFiles = files.filter(file => 
         file.startsWith(QWEN_MULTI_ACCOUNT_PREFIX) && 
         file.endsWith(QWEN_MULTI_ACCOUNT_SUFFIX) &&
         file !== QWEN_CREDENTIAL_FILENAME
       );
       
-      // Check for conflicting auth files and show warning if needed
+      // 检查冲突的认证文件，如果需要则显示警告
       const config = require('../config.js');
       try {
-        // Check if default auth file exists
+        // 检查默认认证文件是否存在
         const defaultAuthExists = await fs.access(this.credentialsPath).then(() => true).catch(() => false);
         
-        // Show warning if both default and named auth files exist AND QWEN_CODE_AUTH_USE is enabled
+        // 如果默认和命名的认证文件都存在且QWEN_CODE_AUTH_USE已启用，则显示警告
         if (defaultAuthExists && accountFiles.length > 0 && config.qwenCodeAuthUse !== false) {
           console.log('\n\x1b[31m%s\x1b[0m', '[PROXY WARNING] Conflicting authentication files detected!');
           console.log('\x1b[31m%s\x1b[0m', 'Found both default ~/.qwen/oauth_creds.json (created by qwen-code) and named account file(s) ~/.qwen/oauth_creds_<name>.json');
@@ -111,17 +116,17 @@ class QwenAuthManager {
           console.log('\x1b[31m%s\x1b[0m', 'Solution: Set QWEN_CODE_AUTH_USE=false in your .env file, or remove the default auth file.');
         }
       } catch (checkError) {
-        // Ignore check errors
+        // 忽略检查错误
       }
       
-      // Load each account
+      // 加载每个账户
       for (const file of accountFiles) {
         try {
           const accountPath = path.join(this.qwenDir, file);
           const credentialsData = await fs.readFile(accountPath, 'utf8');
           const credentials = JSON.parse(credentialsData);
           
-          // Extract account ID from filename
+          // 从文件名提取账户ID
           const accountId = file.substring(
             QWEN_MULTI_ACCOUNT_PREFIX.length,
             file.length - QWEN_MULTI_ACCOUNT_SUFFIX.length
@@ -142,34 +147,34 @@ class QwenAuthManager {
 
   async saveCredentials(credentials, accountId = null) {
     try {
-      // Sanitize credentials before saving - ensure sensitive data is properly handled
+      // 保存前清理凭证 - 确保敏感数据得到正确处理
       const sanitizedCredentials = { ...credentials };
       
-      // Validate credentials structure before saving
+      // 保存前验证凭证结构
       if (!sanitizedCredentials.access_token || !sanitizedCredentials.refresh_token || !sanitizedCredentials.expiry_date) {
         throw new Error('Incomplete credentials data');
       }
       
-      // Ensure file permissions are secure
+      // 确保文件权限安全
       const credString = JSON.stringify(sanitizedCredentials, null, 2);
       
       let filePath;
       if (accountId) {
-        // Save to specific account file
+        // 保存到特定账户文件
         const accountFilename = `${QWEN_MULTI_ACCOUNT_PREFIX}${accountId}${QWEN_MULTI_ACCOUNT_SUFFIX}`;
         filePath = path.join(this.qwenDir, accountFilename);
         await fs.writeFile(filePath, credString);
         
-        // Update accounts map
+        // 更新账户映射
         this.accounts.set(accountId, sanitizedCredentials);
       } else {
-        // Save to default credentials file
+        // 保存到默认凭证文件
         filePath = this.credentialsPath;
         await fs.writeFile(filePath, credString);
         this.credentials = sanitizedCredentials;
       }
       
-      // Ensure the credentials file has secure permissions (read/write for owner only)
+      // 确保证据文件具有安全权限（仅所有者可读写）
       try {
         await fs.chmod(filePath, 0o600); // Only owner can read/write
       } catch (chmodError) {
@@ -186,19 +191,19 @@ class QwenAuthManager {
       return false;
     }
     
-    // Check if token has been tampered with by validating structure
+    // 通过验证结构检查token是否被篡改
     if (typeof credentials.access_token !== 'string' || credentials.access_token.length === 0) {
       console.warn('Invalid access token format');
       return false;
     }
     
-    // Check if expiry date is valid
+    // 检查过期日期是否有效
     if (isNaN(credentials.expiry_date) || credentials.expiry_date <= 0) {
       console.warn('Invalid expiry date');
       return false;
     }
     
-    // Check if token is expired or expiring soon
+    // 检查token是否已过期或即将过期
     return Date.now() < credentials.expiry_date - TOKEN_REFRESH_BUFFER_MS;
   }
 
@@ -237,10 +242,10 @@ class QwenAuthManager {
       const accountFilename = `${QWEN_MULTI_ACCOUNT_PREFIX}${accountId}${QWEN_MULTI_ACCOUNT_SUFFIX}`;
       const accountPath = path.join(this.qwenDir, accountFilename);
       
-      // Remove file
+      // 删除文件
       await fs.unlink(accountPath);
       
-      // Remove from accounts map
+      // 从账户映射中删除
       this.accounts.delete(accountId);
       
       console.log(`Account ${accountId} removed successfully`);
@@ -293,13 +298,13 @@ class QwenAuthManager {
       return newCredentials;
     } catch (error) {
       console.error('\x1b[31m%s\x1b[0m', 'Failed to refresh Qwen access token');
-      // If refresh fails, the user likely needs to re-auth completely.
+      // 如果刷新失败，用户可能需要重新认证。
       throw new Error('Failed to refresh access token. Please re-authenticate with the Qwen CLI.');
     }
   }
 
   async getValidAccessToken(accountId = null) {
-    // If there's already a refresh in progress, wait for it
+    // 如果已有刷新正在进行，等待其完成
     if (this.refreshPromise) {
       console.log('\x1b[36m%s\x1b[0m', 'Waiting for ongoing token refresh...');
       return this.refreshPromise;
@@ -309,15 +314,15 @@ class QwenAuthManager {
       let credentials;
       
       if (accountId) {
-        // Get credentials for specific account
+        // 获取特定账户的凭证
         credentials = this.getAccountCredentials(accountId);
         if (!credentials) {
-          // Load all accounts if not already loaded
+          // 如果尚未加载，则加载所有账户
           await this.loadAllAccounts();
           credentials = this.getAccountCredentials(accountId);
         }
       } else {
-        // Use default credentials
+        // 使用默认凭证
         credentials = await this.loadCredentials();
       }
 
@@ -329,7 +334,7 @@ class QwenAuthManager {
         }
       }
 
-      // Check if token is valid
+      // 检查token是否有效
       if (this.isTokenValid(credentials)) {
         console.log(accountId ? 
           `\x1b[32m%s\x1b[0m` : 
@@ -347,7 +352,7 @@ class QwenAuthManager {
           'Qwen access token expired or expiring soon, refreshing...');
       }
 
-      // Token needs refresh, start refresh operation
+      // Token需要刷新，开始刷新操作
       this.refreshPromise = this.performTokenRefresh(credentials, accountId);
       
       try {
@@ -366,7 +371,7 @@ class QwenAuthManager {
     try {
       const newCredentials = await this.refreshAccessToken(credentials);
       
-      // Save to the appropriate account
+      // 保存到适当的账户
       if (accountId) {
         await this.saveCredentials(newCredentials, accountId);
       } else {
@@ -384,7 +389,7 @@ class QwenAuthManager {
    * @returns {Object|null} Object with {accountId, credentials} or null if no accounts available
    */
   async getNextAccount() {
-    // Load all accounts if not already loaded
+    // 如果尚未加载，则加载所有账户
     if (this.accounts.size === 0) {
       await this.loadAllAccounts();
     }
@@ -395,11 +400,11 @@ class QwenAuthManager {
       return null;
     }
     
-    // Use round-robin selection
+    // 使用轮询选择
     const accountId = accountIds[this.currentAccountIndex];
     const credentials = this.getAccountCredentials(accountId);
     
-    // Update index for next call
+    // 更新索引以供下次调用
     this.currentAccountIndex = (this.currentAccountIndex + 1) % accountIds.length;
     
     return { accountId, credentials };
@@ -410,10 +415,10 @@ class QwenAuthManager {
    * @returns {Object|null} Object with {accountId, credentials} or null if no accounts available
    */
   peekNextAccount() {
-    // Load all accounts if not already loaded
+    // 如果尚未加载，则加载所有账户
     if (this.accounts.size === 0) {
-      // Note: This is a synchronous method, so we can't load accounts here
-      // The accounts should already be loaded before calling this method
+      // 注意：这是一个同步方法，所以我们不能在这里加载账户
+      // 在调用此方法之前，账户应该已经加载
       return null;
     }
     
@@ -423,7 +428,7 @@ class QwenAuthManager {
       return null;
     }
     
-    // Use round-robin selection without updating index
+    // 使用轮询选择 without updating index
     const accountId = accountIds[this.currentAccountIndex];
     const credentials = this.getAccountCredentials(accountId);
     
@@ -441,7 +446,7 @@ class QwenAuthManager {
   }
 
   async initiateDeviceFlow() {
-    // Generate PKCE code verifier and challenge
+    // 生成PKCE代码验证器和挑战
     const { code_verifier, code_challenge } = generatePKCEPair();
 
     const bodyData = new URLSearchParams({
@@ -468,12 +473,12 @@ class QwenAuthManager {
 
       const result = await response.json();
       
-      // Check if the response indicates success
+      // 检查响应是否表示成功
       if (!result.device_code) {
         throw new Error(`Device authorization failed: ${result.error || 'Unknown error'} - ${result.error_description || 'No details provided'}`);
       }
 
-      // Add the code_verifier to the result so it can be used later for polling
+      // 将code_verifier添加到结果中，以便稍后用于轮询
       return {
         ...result,
         code_verifier: code_verifier
@@ -507,20 +512,20 @@ class QwenAuthManager {
         });
 
         if (!response.ok) {
-          // Parse the response as JSON to check for OAuth RFC 8628 standard errors
+          // 将响应解析为JSON以检查OAuth RFC 8628标准错误
           try {
             const errorData = await response.json();
 
-            // According to OAuth RFC 8628, handle standard polling responses
+            // 根据OAuth RFC 8628，处理标准轮询响应
             if (response.status === 400 && errorData.error === 'authorization_pending') {
-              // User has not yet approved the authorization request. Continue polling.
+              // 用户尚未批准授权请求。继续轮询。
               console.log(`Polling attempt ${attempt + 1}/${maxAttempts}...`);
               await new Promise(resolve => setTimeout(resolve, pollInterval));
               continue;
             }
 
             if (response.status === 400 && errorData.error === 'slow_down') {
-              // Client is polling too frequently. Increase poll interval.
+              // 客户端轮询过于频繁。增加轮询间隔。
               pollInterval = Math.min(pollInterval * 1.5, 10000); // Increase by 50%, max 10 seconds
               console.log(`Server requested to slow down, increasing poll interval to ${pollInterval}ms`);
               await new Promise(resolve => setTimeout(resolve, pollInterval));
@@ -535,10 +540,10 @@ class QwenAuthManager {
               throw new Error('Authorization denied by user. Please restart the authentication process.');
             }
 
-            // For other errors, throw with proper error information
+            // 对于其他错误，抛出带有适当错误信息的异常
             throw new Error(`Device token poll failed: ${errorData.error || 'Unknown error'} - ${errorData.error_description || 'No details provided'}`);
           } catch (_parseError) {
-            // If JSON parsing fails, fall back to text response
+            // 如果JSON解析失败，回退到文本响应
             const errorData = await response.text();
             throw new Error(`Device token poll failed: ${response.status} ${response.statusText}. Response: ${errorData}`);
           }
@@ -546,7 +551,7 @@ class QwenAuthManager {
 
         const tokenData = await response.json();
         
-        // Convert to QwenCredentials format and save
+        // 转换为QwenCredentials格式并保存
         const credentials = {
           access_token: tokenData.access_token,
           refresh_token: tokenData.refresh_token || undefined,
@@ -559,17 +564,17 @@ class QwenAuthManager {
         
         return credentials;
       } catch (error) {
-        // Handle specific error cases
+        // 处理特定错误情况
         const errorMessage = error instanceof Error ? error.message : String(error);
         
-        // If we get a specific OAuth error that should stop polling, throw it
+        // 如果我们遇到应该停止轮询的特定OAuth错误，则抛出该错误
         if (errorMessage.includes('expired_token') || 
             errorMessage.includes('access_denied') || 
             errorMessage.includes('Device authorization failed')) {
           throw error;
         }
         
-        // For other errors, continue polling
+        // 对于其他错误，继续轮询
         console.log(`Polling attempt ${attempt + 1}/${maxAttempts} failed:`, errorMessage);
         await new Promise(resolve => setTimeout(resolve, pollInterval));
       }

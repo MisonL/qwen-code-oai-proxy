@@ -1,3 +1,8 @@
+/**
+ * Anthropic API 代理
+ * 将 Anthropic API 请求转换为 Qwen API 请求
+ */
+
 const { QwenAPI } = require('../qwen/api.js');
 const Joi = require('joi');
 const { ErrorFormatter } = require('../utils/errorFormatter.js');
@@ -5,15 +10,15 @@ const { Cache } = require('../utils/cache.js');
 const { anthropicToQwenConverter, qwenToAnthropicConverter } = require('./converter.js');
 const { anthropicModels } = require('./models.js');
 
-// Create cache instance for static data
+// 为静态数据创建缓存实例
 const staticDataCache = new Cache();
 
 class AnthropicProxy {
   constructor(debugLogger = null) {
     this.qwenAPI = new QwenAPI();
-    this.debugLogger = debugLogger; // Allow dependency injection of debug logger
+    this.debugLogger = debugLogger; // 允许注入调试日志记录器
     
-    // Define Joi schema for Anthropic messages request
+    // 为Anthropic消息请求定义Joi模式
     this.anthropicMessagesSchema = Joi.object({
       model: Joi.string().max(100).required(),
       messages: Joi.array().items(
@@ -57,12 +62,12 @@ class AnthropicProxy {
     }).required();
   }
 
-  // Validate request against schema
+  // 根据模式验证请求
   validateRequest(schema, data) {
     const { error, value } = schema.validate(data, { abortEarly: false });
     if (error) {
       const errorDetails = error.details.map(detail => detail.message).join(', ');
-      throw new Error(`Validation error: ${errorDetails}`);
+      throw new Error(`验证错误: ${errorDetails}`);
     }
     return value;
   }
@@ -78,7 +83,7 @@ class AnthropicProxy {
     const model = req.body && req.body.model ? req.body.model : 'unknown';
     
     try {
-      // Validate the request body
+      // 验证请求体
       const validatedBody = this.validateRequest(this.anthropicMessagesSchema, req.body);
       
       console.log('Received Anthropic API request:', validatedBody);
@@ -104,13 +109,13 @@ class AnthropicProxy {
       // 将 Qwen 响应转换为 Anthropic 格式
       const anthropicResponse = qwenToAnthropicConverter(response);
       
-      // Record successful API request metrics
+      // 记录成功的 API 请求指标
       if (this.metricsCollector) {
         const duration = (Date.now() - startTime) / 1000; // Convert to seconds
         this.metricsCollector.incrementApiRequest('anthropic', model, accountId);
         this.metricsCollector.recordApiRequestDuration('anthropic', model, accountId, duration);
         
-        // Record token usage metrics if available
+        // 如果可用，记录 token 使用指标
         if (response && response.usage) {
           const { prompt_tokens = 0, completion_tokens = 0 } = response.usage;
           this.metricsCollector.recordTokenUsage('input', model, accountId, prompt_tokens);
@@ -120,23 +125,23 @@ class AnthropicProxy {
       
       res.json(anthropicResponse);
     } catch (error) {
-      // Record failed API request metrics
+      // 记录失败的 API 请求指标
       if (this.metricsCollector) {
         const duration = (Date.now() - startTime) / 1000; // Convert to seconds
         this.metricsCollector.incrementApiRequest('anthropic', model, accountId);
         this.metricsCollector.recordApiRequestDuration('anthropic', model, accountId, duration);
       }
       
-      // Check if it's a validation error
+      // 检查是否为验证错误
       if (error.message.includes('Validation error')) {
         console.error('\x1b[31m%s\x1b[0m', `Validation error: ${error.message}`);
         const validationError = ErrorFormatter.anthropicValidationError(error.message);
         return res.status(validationError.status).json(validationError.body);
       }
       
-      // Handle authentication errors
+      // 处理认证错误
       if (error.message.includes('Not authenticated') || error.message.includes('access token')) {
-        // Log detailed error
+        // 记录详细错误
         if (this.debugLogger) {
           await this.debugLogger.logError('/anthropic/v1/messages auth', error, 'error');
         }
@@ -145,7 +150,7 @@ class AnthropicProxy {
         return res.status(authError.status).json(authError.body);
       }
       
-      // Log detailed error
+      // 记录详细错误
       if (this.debugLogger) {
         await this.debugLogger.logError('/anthropic/v1/messages', error, 'error');
       }
@@ -167,7 +172,7 @@ class AnthropicProxy {
     const model = req.body && req.body.model ? req.body.model : 'unknown';
     
     try {
-      // Validate the request body
+      // 验证请求体
       const validatedBody = this.validateRequest(this.anthropicMessagesSchema, { ...req.body, stream: true });
       
       // 设置 SSE 响应头
@@ -194,9 +199,9 @@ class AnthropicProxy {
         accountId
       });
 
-      // Record successful API request metrics (at the start of streaming)
+      // 记录成功的 API 请求指标（在流式传输开始时）
       if (this.metricsCollector) {
-        const duration = (Date.now() - startTime) / 1000; // Convert to seconds at the start
+        const duration = (Date.now() - startTime) / 1000; // 在开始时转换为秒
         this.metricsCollector.incrementApiRequest('anthropic_streaming', model, accountId);
         this.metricsCollector.recordApiRequestDuration('anthropic_streaming', model, accountId, duration);
       }
@@ -248,14 +253,14 @@ class AnthropicProxy {
         res.end();
       });
     } catch (error) {
-      // Record failed API request metrics
+      // 记录失败的 API 请求指标
       if (this.metricsCollector) {
         const duration = (Date.now() - startTime) / 1000; // Convert to seconds
         this.metricsCollector.incrementApiRequest('anthropic_streaming', model, accountId);
         this.metricsCollector.recordApiRequestDuration('anthropic_streaming', model, accountId, duration);
       }
       
-      // Check if it's a validation error
+      // 检查是否为验证错误
       if (error.message.includes('Validation error')) {
         console.error('\x1b[31m%s\x1b[0m', `Validation error in streaming request: ${error.message}`);
         const validationError = ErrorFormatter.anthropicValidationError(error.message);
@@ -264,9 +269,9 @@ class AnthropicProxy {
         return;
       }
       
-      // Handle authentication errors for streaming
+      // 处理认证错误 for streaming
       if (error.message.includes('Not authenticated') || error.message.includes('access token')) {
-        // Log detailed error
+        // 记录详细错误
         if (this.debugLogger) {
           await this.debugLogger.logError('/anthropic/v1/messages streaming auth', error, 'error');
         }
@@ -277,7 +282,7 @@ class AnthropicProxy {
         return;
       }
       
-      // Log detailed error
+      // 记录详细错误
       if (this.debugLogger) {
         await this.debugLogger.logError('/anthropic/v1/messages streaming', error, 'error');
       }
@@ -298,17 +303,17 @@ class AnthropicProxy {
     try {
       const cacheKey = 'anthropic_models';
       
-      // Check if models are already cached
+      // 检查模型是否已缓存
       const cachedModels = staticDataCache.get(cacheKey);
       if (cachedModels) {
-        console.log('Returning cached Anthropic models list');
+        console.log('返回缓存的 Anthropic 模型列表');
         res.json(cachedModels);
         return;
       }
       
-      console.log('Returning Anthropic models list');
+      console.log('返回 Anthropic 模型列表');
       
-      // Create models response
+      // 创建模型响应
       const modelsResponse = {
         object: 'list',
         data: anthropicModels.map(model => ({
@@ -319,16 +324,16 @@ class AnthropicProxy {
         }))
       };
       
-      // Cache the models for 1 hour
-      staticDataCache.set(cacheKey, modelsResponse, 60 * 60 * 1000); // 1 hour
+      // 缓存模型1小时
+      staticDataCache.set(cacheKey, modelsResponse, 60 * 60 * 1000); // 1小时
       
       res.json(modelsResponse);
     } catch (error) {
-      console.error('Error in Anthropic models endpoint:', error);
+      console.error('Anthropic 模型端点中的错误:', error);
       res.status(500).json({
         error: {
           type: 'api_error',
-          message: error.message || 'Internal server error'
+          message: error.message || '内部服务器错误'
         }
       });
     }

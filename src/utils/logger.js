@@ -2,12 +2,12 @@ const fs = require('fs').promises;
 const path = require('path');
 const config = require('../config.js');
 
-// Ensure debug directory exists
+// 确保调试目录存在
 const debugDir = path.join(__dirname, '..', '..', 'debug');
 
 class DebugLogger {
   constructor() {
-    // Ensure debug directory exists
+    // 确保调试目录存在
     this.ensureDebugDir();
   }
 
@@ -15,28 +15,28 @@ class DebugLogger {
     try {
       await fs.access(debugDir);
     } catch (error) {
-      // Directory doesn't exist, create it
+      // 目录不存在，创建它
       await fs.mkdir(debugDir, { recursive: true });
     }
   }
 
   /**
-   * Enforce log file limit by removing oldest files when limit is exceeded
-   * @param {number} limit - Maximum number of log files to keep
+   * 通过删除最旧的文件来执行日志文件限制
+   * @param {number} limit - 保留日志文件的最大数量
    */
   async enforceLogFileLimit(limit) {
     try {
-      // Get all debug files in the directory
+      // 获取目录中的所有调试文件
       const files = await fs.readdir(debugDir);
       
-      // Filter for debug files only (starting with 'debug-' and ending with '.txt')
+      // 仅过滤调试文件（以 'debug-' 开头并以 '.txt' 结尾）
       const debugFiles = files.filter(file => 
         file.startsWith('debug-') && file.endsWith('.txt')
       );
       
-      // If we have more files than the limit, remove the oldest ones
+      // 如果我们有超过限制的文件，则删除最旧的文件
       if (debugFiles.length > limit) {
-        // Get file stats to sort by creation time
+        // 获取文件状态以按创建时间排序
         const fileStats = await Promise.all(
           debugFiles.map(async (file) => {
             const filePath = path.join(debugDir, file);
@@ -45,27 +45,27 @@ class DebugLogger {
           })
         );
         
-        // Sort by modification time (oldest first)
+        // 按修改时间排序（最旧的在前）
         fileStats.sort((a, b) => a.mtime - b.mtime);
         
-        // Calculate how many files to remove
+        // 计算要删除的文件数量
         const filesToRemove = fileStats.length - limit;
         
-        // Remove the oldest files
+        // 删除最旧的文件
         for (let i = 0; i < filesToRemove; i++) {
           const filePath = path.join(debugDir, fileStats[i].file);
           await fs.unlink(filePath);
         }
       }
     } catch (error) {
-      // Silently handle errors to avoid breaking the application
-      // Log file limit enforcement is not critical to the main functionality
+      // 静默处理错误以避免破坏应用程序
+      // 日志文件限制执行对主要功能不是关键的
     }
   }
 
   /**
-   * Format current date/time for filename
-   * @returns {string} Formatted timestamp like '2023-12-06-14:30:45'
+   * 为文件名格式化当前日期/时间
+   * @returns {string} 格式化的时间戳，如 '2023-12-06-14:30:45'
    */
   getTimestampForFilename() {
     const now = new Date();
@@ -80,8 +80,8 @@ class DebugLogger {
   }
 
   /**
-   * Format current date/time for log entries
-   * @returns {string} Formatted timestamp like '2023-12-06 14:30:45.123'
+   * 为日志条目格式化当前日期/时间
+   * @returns {string} 格式化的时间戳，如 '2023-12-06 14:30:45.123'
    */
   getTimestampForLog() {
     const now = new Date();
@@ -97,17 +97,17 @@ class DebugLogger {
   }
 
   /**
-   * Log API request and response to a file
-   * @param {string} endpoint - API endpoint being called
-   * @param {object} request - Request data
-   * @param {object} response - Response data
-   * @param {object} error - Error object if request failed
-   * @returns {string} The name of the debug file created
+   * 将API请求和响应记录到文件
+   * @param {string} endpoint - 被调用的API端点
+   * @param {object} request - 请求数据
+   * @param {object} response - 响应数据
+   * @param {object} error - 请求失败时的错误对象
+   * @returns {string} 创建的调试文件名
    */
   async logApiCall(endpoint, request, response, error = null) {
-    // Check if debug logging is enabled
+    // 检查是否启用了调试日志
     if (!config.debugLog) {
-      // If debug logging is disabled, just return without creating log files
+      // 如果调试日志已禁用，直接返回而不创建日志文件
       return null;
     }
     
@@ -116,7 +116,7 @@ class DebugLogger {
       const logFilePath = path.join(debugDir, `debug-${timestamp}.txt`);
       const debugFileName = `debug-${timestamp}.txt`;
       
-      // Extract only the relevant parts of the request
+      // 仅提取请求的相关部分
       const logRequest = {
         method: request.method,
         url: request.url,
@@ -125,7 +125,7 @@ class DebugLogger {
         query: request.query
       };
       
-      // Create detailed error information if error exists
+      // 如果错误存在，则创建详细的错误信息
       let detailedError = null;
       if (error) {
         detailedError = {
@@ -137,7 +137,7 @@ class DebugLogger {
           timestamp: this.getTimestampForLog()
         };
         
-        // If the error has additional properties, include them
+        // 如果错误有额外属性，则包含它们
         if (error.response && error.response.status) {
           detailedError.apiStatus = error.response.status;
           detailedError.apiData = error.response.data;
@@ -164,14 +164,14 @@ class DebugLogger {
         isErrorResponse: !!error
       };
       
-      // Handle circular references and non-serializable objects
+      // 处理循环引用和不可序列化的对象
       const logContent = JSON.stringify(logEntry, (key, value) => {
         if (key === 'stack' && typeof value === 'string') {
-          // Limit stack trace length
-          return value.split('\n').slice(0, 20).join('\n'); // Increased to 20 lines for more detail
+          // 限制堆栈跟踪长度
+          return value.split('\n').slice(0, 20).join('\n'); // 增加到20行以获得更多细节
         }
         if (value instanceof Error) {
-          // Handle Error objects directly
+          // 直接处理Error对象
           return {
             name: value.name,
             message: value.message,
@@ -179,7 +179,7 @@ class DebugLogger {
           };
         }
         if (typeof value === 'bigint') {
-          // Handle BigInt values
+          // 处理BigInt值
           return value.toString();
         }
         return value;
@@ -187,16 +187,16 @@ class DebugLogger {
       
       await fs.writeFile(logFilePath, logContent);
       
-      // Enforce log file limit
+      // 执行日志文件限制
       await this.enforceLogFileLimit(config.logFileLimit);
       
-      // Print the debug file name to terminal in green
-      console.log('\x1b[32m%s\x1b[0m', `Debug log saved to: ${debugFileName}`);
+      // 以绿色在终端打印调试文件名
+      console.log('\x1b[32m%s\x1b[0m', `调试日志已保存到: ${debugFileName}`);
       
       return debugFileName;
     } catch (err) {
-      // Don't let logging errors break the application
-      // Silently handle logging errors to avoid cluttering the terminal
+      // 不要让日志错误破坏应用程序
+      // 静默处理日志错误以避免让终端混乱
       return null;
     }
   }
@@ -260,9 +260,9 @@ class DebugLogger {
   }
 
   /**
-   * Extract HTTP status code from error if available
-   * @param {Error} error - The error object
-   * @returns {number|null} The status code or null
+   * 从错误中提取HTTP状态码（如果可用）
+   * @param {Error} error - 错误对象
+   * @returns {number|null} 状态码或null
    */
   getErrorStatusCode(error) {
     if (error.response && error.response.status) {
@@ -273,7 +273,7 @@ class DebugLogger {
       return error.status;
     }
     
-    // Extract status code from error message if present
+    // 如果存在，从错误消息中提取状态码
     const match = error.message.match(/status[^\d]*(\d{3})/i);
     if (match) {
       return parseInt(match[1]);
@@ -283,13 +283,13 @@ class DebugLogger {
   }
   
   /**
-   * Create a simplified log of just the error with context
-   * @param {string} context - Context where the error occurred
-   * @param {Error} error - The error object
-   * @param {string} level - Log level (error, warn, info)
+   * 仅创建带有上下文的错误的简化日志
+   * @param {string} context - 错误发生的上下文
+   * @param {Error} error - 错误对象
+   * @param {string} level - 日志级别（错误、警告、信息）
    */
   async logError(context, error, level = 'error') {
-    // Check if debug logging is enabled
+    // 检查是否启用了调试日志
     if (!config.debugLog) {
       return null;
     }
@@ -309,7 +309,7 @@ class DebugLogger {
         timestamp: this.getTimestampForLog()
       };
       
-      // Include additional error properties if available
+      // 如果可用，则包含额外的错误属性
       if (error.code) detailedError.code = error.code;
       if (error.errno) detailedError.errno = error.errno;
       if (error.syscall) detailedError.syscall = error.syscall;
@@ -326,10 +326,10 @@ class DebugLogger {
       
       await fs.writeFile(logFilePath, JSON.stringify(detailedError, null, 2));
       
-      // Enforce log file limit
+      // 执行日志文件限制
       await this.enforceLogFileLimit(config.logFileLimit);
       
-      console.log('\x1b[32m%s\x1b[0m', `Error log saved to: ${debugFileName}`);
+      console.log('\x1b[32m%s\x1b[0m', `错误日志已保存到: ${debugFileName}`);
       
       return debugFileName;
     } catch (err) {
@@ -345,10 +345,10 @@ class DebugLogger {
   sanitizeRequest(request) {
     if (!request) return request;
     
-    // Create a deep copy to avoid modifying the original
+    // 创建深层副本以避免修改原始数据
     const sanitized = JSON.parse(JSON.stringify(request));
     
-    // Remove sensitive headers if they exist
+    // 如果存在，删除敏感头信息
     if (sanitized.headers) {
       if (sanitized.headers.Authorization) {
         sanitized.headers.Authorization = '[REDACTED]';
@@ -358,9 +358,9 @@ class DebugLogger {
       }
     }
     
-    // Remove sensitive body fields if they exist
+    // 如果存在，删除敏感的主体字段
     if (sanitized.body) {
-      // If body contains access tokens or credentials, redact them
+      // 如果主体包含访问令牌或凭证，则删除它们
       if (sanitized.body.access_token) {
         sanitized.body.access_token = '[REDACTED]';
       }

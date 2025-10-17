@@ -1,22 +1,27 @@
+/**
+ * 服务器配置
+ * 处理环境变量验证、默认值和配置验证
+ */
+
 // src/config.js
 require('dotenv').config();
 
 const Joi = require('joi');
 const { ConfigVersionManager } = require('./utils/configVersionManager.js');
 
-// Initialize version manager
+// 初始化版本管理器
 const versionManager = new ConfigVersionManager();
 
-// Define validation schema for configuration
+// 为配置定义验证模式
 const configSchema = Joi.object({
-  // Server configuration
+  // 服务器配置
   port: Joi.number().port().default(8765),
   host: Joi.string().default('0.0.0.0'),
   
-  // Streaming configuration
+  // 流式传输配置
   stream: Joi.boolean().default(false),
   
-  // Qwen OAuth configuration
+  // Qwen OAuth配置
   qwen: Joi.object({
     clientId: Joi.string().max(200).default('f0304373b74a44d2b584a3fb70ca9e56'),
     clientSecret: Joi.string().max(200).default(''),
@@ -26,27 +31,27 @@ const configSchema = Joi.object({
     scope: Joi.string().max(200).default('openid profile email model.completion')
   }).default(),
   
-  // Default model
+  // 默认模型
   defaultModel: Joi.string().max(100).default('qwen3-coder-plus'),
   
-  // Token refresh buffer (milliseconds)
-  tokenRefreshBuffer: Joi.number().integer().min(1000).max(300000).default(30000), // Between 1s and 5min
+  // Token刷新缓冲区（毫秒）
+  tokenRefreshBuffer: Joi.number().integer().min(1000).max(300000).default(30000), // 1秒到5分钟之间
   
-  // Default account to use first (if available)
+  // 首先使用的默认账户（如果可用）
   defaultAccount: Joi.string().max(100).allow('').default(''),
   
-  // Qwen Code authentication usage
+  // Qwen Code认证使用
   qwenCodeAuthUse: Joi.boolean().default(true),
   
-  // Debug logging configuration
+  // 调试日志配置
   debugLog: Joi.boolean().default(false),
   logFileLimit: Joi.number().integer().min(1).max(1000).default(20),
   
-  // Configuration version (managed by ConfigVersionManager)
+  // 配置版本（由ConfigVersionManager管理）
   version: Joi.string().default(versionManager.getCurrentVersion())
 });
 
-// Get raw config values from environment
+// 从环境变量获取原始配置值
 const rawConfig = {
   port: parseInt(process.env.PORT, 10) || undefined,
   host: process.env.HOST,
@@ -70,12 +75,12 @@ const rawConfig = {
   logFileLimit: parseInt(process.env.LOG_FILE_LIMIT, 10) || undefined
 };
 
-// Add version from environment if available
+// 如果可用，从环境变量添加版本
 if (process.env.CONFIG_VERSION) {
   rawConfig.version = process.env.CONFIG_VERSION;
 }
 
-// Validate the configuration
+// 验证配置
 const { error, value: validatedConfig } = configSchema.validate(rawConfig, { 
   stripUnknown: true,
   convert: true,
@@ -83,32 +88,32 @@ const { error, value: validatedConfig } = configSchema.validate(rawConfig, {
 });
 
 if (error) {
-  console.error('Configuration validation error:', error.details[0].message);
+  console.error('配置验证错误:', error.details[0].message);
   process.exit(1);
 }
 
-// Apply any necessary configuration migrations
+// 应用任何必要的配置迁移
 const migratedConfig = versionManager.migrateConfig(validatedConfig);
 
-// Validate the final configuration
+// 验证最终配置
 const validationResult = versionManager.validateConfig(migratedConfig);
 if (!validationResult.valid) {
-  console.error('Configuration validation failed after migration:', validationResult.errors);
+  console.error('迁移后配置验证失败:', validationResult.errors);
   process.exit(1);
 }
 
-// Additional validations after parsing
+// 解析后的附加验证
 if (migratedConfig.port < 1 || migratedConfig.port > 65535) {
-  console.error('Invalid port configuration: must be between 1 and 65535');
+  console.error('无效的端口配置：必须在1到65535之间');
   process.exit(1);
 }
 
 if (migratedConfig.logFileLimit < 1) {
-  console.error('Invalid LOG_FILE_LIMIT: must be at least 1');
+  console.error('无效的LOG_FILE_LIMIT：必须至少为1');
   process.exit(1);
 }
 
-console.log(`Configuration validated successfully. Server will run on ${migratedConfig.host}:${migratedConfig.port}`);
-console.log(`Configuration version: ${migratedConfig.version}`);
+console.log(`配置验证成功。服务器将在 ${migratedConfig.host}:${migratedConfig.port} 上运行`);
+console.log(`配置版本: ${migratedConfig.version}`);
 
 module.exports = migratedConfig;

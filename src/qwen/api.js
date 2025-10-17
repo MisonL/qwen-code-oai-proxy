@@ -1,3 +1,8 @@
+/**
+ * Qwen API 客户端
+ * 与 Qwen API 进行交互，处理认证、账户管理和错误处理
+ */
+
 const axios = require('axios');
 const http = require('http');
 const https = require('https');
@@ -7,7 +12,7 @@ const path = require('path');
 const { promises: fs } = require('fs');
 const { Cache } = require('../utils/cache.js');
 
-// Create HTTP agents with connection pooling
+// 创建支持连接池的HTTP代理
 const httpAgent = new http.Agent({
   keepAlive: true,
   keepAliveMsecs: 1000,
@@ -26,14 +31,14 @@ const httpsAgent = new https.Agent({
   freeSocketTimeout: 30000
 });
 
-// Create cache instance for static data
+// 为静态数据创建缓存实例
 const staticDataCache = new Cache();
 
-// Default Qwen configuration
+// 默认Qwen配置
 const DEFAULT_QWEN_API_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 const DEFAULT_MODEL = 'qwen3-coder-plus';
 
-// List of known Qwen models
+// 已知Qwen模型列表
 const QWEN_MODELS = [
   {
     id: 'qwen3-coder-plus',
@@ -62,7 +67,7 @@ const QWEN_MODELS = [
  * @returns {Array} Processed messages
  */
 function processMessagesForVision(messages, model) {
-  // Only process for vision-model
+  // 仅对视觉模型进行处理
   if (model !== 'vision-model') {
     return messages;
   }
@@ -72,14 +77,14 @@ function processMessagesForVision(messages, model) {
       return message;
     }
 
-    // If content is already an array, assume it's properly formatted
+    // 如果内容已经是数组，假设其格式正确
     if (Array.isArray(message.content)) {
       return message;
     }
 
-    // If content is a string, check if it contains image references
+    // 如果内容是字符串，检查是否包含图像引用
     if (typeof message.content === 'string') {
-      // Look for base64 image patterns or URLs
+      // 查找base64图像模式或URL
       const imagePatterns = [
         /data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g,
         /https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp|bmp)/gi
@@ -89,7 +94,7 @@ function processMessagesForVision(messages, model) {
       const content = message.content;
       const parts = [{ type: 'text', text: content }];
 
-      // Extract base64 images
+      // 提取base64图像
       const base64Matches = content.match(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g);
       if (base64Matches) {
         hasImages = true;
@@ -107,7 +112,7 @@ function processMessagesForVision(messages, model) {
         });
       }
 
-      // Extract image URLs
+      // 提取图像URL
       const urlMatches = content.match(/https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp|bmp)/gi);
       if (urlMatches) {
         hasImages = true;
@@ -121,7 +126,7 @@ function processMessagesForVision(messages, model) {
         });
       }
 
-      // If no images found, keep as string
+      // 如果未找到图像，保持为字符串
       if (!hasImages) {
         return message;
       }
@@ -147,7 +152,7 @@ function isAuthError(error) {
       ? error.message.toLowerCase() 
       : String(error).toLowerCase();
 
-  // Define a type for errors that might have status or code properties
+  // 为可能具有状态或代码属性的错误定义类型
   const errorWithCode = error;
   const errorCode = errorWithCode?.response?.status || errorWithCode?.code;
 
@@ -163,7 +168,7 @@ function isAuthError(error) {
     errorMessage.includes('authentication') ||
     errorMessage.includes('access denied') ||
     (errorMessage.includes('token') && errorMessage.includes('expired')) ||
-    // Also check for 504 errors which might be related to auth issues
+    // 还要检查可能与认证问题相关的504错误
     errorCode === 504 ||
     errorMessage.includes('504') ||
     errorMessage.includes('gateway timeout')
@@ -181,7 +186,7 @@ function isQuotaExceededError(error) {
       ? error.message.toLowerCase() 
       : String(error).toLowerCase();
 
-  // Define a type for errors that might have status or code properties
+  // 为可能具有状态或代码属性的错误定义类型
   const errorWithCode = error;
   const errorCode = errorWithCode?.response?.status || errorWithCode?.code;
 
@@ -202,21 +207,21 @@ class QwenAPI {
     this.lastResetDate = new Date().toISOString().split('T')[0]; // Track last reset date (UTC)
     this.requestCountFile = path.join(this.authManager.qwenDir, 'request_counts.json');
     
-    // Smart account selection
+    // 智能账户选择
     this.failedAccountsFile = path.join(this.authManager.qwenDir, 'failed_accounts.json');
     this.failedAccounts = new Set();
     this.lastFailedReset = null;
     
-    // File I/O caching mechanism
+    // 文件I/O缓存机制
     this.lastSaveTime = 0;
     this.saveInterval = 60000; // Save every 60 seconds
     this.pendingSave = false;
     
-    // Concurrent request handling
+    // 并发请求处理
     this.accountLocks = new Map(); // Track which accounts are in use
     this.accountQueues = new Map(); // Queue for requests waiting for specific accounts
     
-    // Rate limiting per account
+    // 每账户速率限制
     this.accountRequestCounts = new Map(); // Track requests per account per time window
     this.requestWindowDuration = 60000; // 1 minute window
     
@@ -245,29 +250,29 @@ class QwenAPI {
       const data = await fs.readFile(this.requestCountFile, 'utf8');
       const counts = JSON.parse(data);
       
-      // Restore last reset date
+      // 恢复上次重置日期
       if (counts.lastResetDate) {
         this.lastResetDate = counts.lastResetDate;
       }
       
-      // Restore request counts
+      // 恢复请求计数
       if (counts.requests) {
         for (const [accountId, count] of Object.entries(counts.requests)) {
           this.requestCount.set(accountId, count);
         }
       }
       
-      // Restore token usage data
+      // 恢复token使用数据
       if (counts.tokenUsage) {
         for (const [accountId, usageData] of Object.entries(counts.tokenUsage)) {
           this.tokenUsage.set(accountId, usageData);
         }
       }
       
-      // Reset counts if we've crossed into a new UTC day
+      // 如果进入新的UTC日期则重置计数
       this.resetRequestCountsIfNeeded();
     } catch (error) {
-      // File doesn't exist or is invalid, start with empty counts
+      // 文件不存在或无效，从空计数开始
       this.resetRequestCountsIfNeeded();
     }
   }
@@ -295,17 +300,17 @@ class QwenAPI {
    * Schedule a save operation with debouncing
    */
   scheduleSave() {
-    // Don't schedule if save is already pending
+    // 如果保存已在等待中则不安排
     if (this.pendingSave) return;
     
     this.pendingSave = true;
     const now = Date.now();
     
-    // If saved recently, wait for interval, otherwise save immediately
+    // 如果最近已保存，则等待间隔，否则立即保存
     if (now - this.lastSaveTime < this.saveInterval) {
       setTimeout(() => this.saveRequestCounts(), this.saveInterval);
     } else {
-      // Save immediately
+      // 立即保存
       this.saveRequestCounts();
     }
   }
@@ -331,7 +336,7 @@ class QwenAPI {
       const data = await fs.readFile(this.failedAccountsFile, 'utf8');
       const failed = JSON.parse(data);
       
-      // Reset failed accounts if it's a new UTC day
+      // 如果是新的UTC日期则重置失败账户
       const today = new Date().toISOString().split('T')[0];
       if (failed.lastReset !== today) {
         console.log('Resetting failed accounts for new UTC day');
@@ -343,7 +348,7 @@ class QwenAPI {
         this.lastFailedReset = failed.lastReset;
       }
     } catch (error) {
-      // File doesn't exist or is invalid, start with empty failed accounts
+      // 文件不存在或无效，从空失败账户开始
       this.failedAccounts.clear();
       this.lastFailedReset = new Date().toISOString().split('T')[0];
       this.saveFailedAccounts();
@@ -392,7 +397,7 @@ class QwenAPI {
     const currentCount = this.requestCount.get(accountId) || 0;
     this.requestCount.set(accountId, currentCount + 1);
     
-    // Schedule save instead of saving immediately
+    // 安排保存而不是立即保存
     this.scheduleSave();
   }
 
@@ -404,25 +409,25 @@ class QwenAPI {
    */
   async recordTokenUsage(accountId, inputTokens, outputTokens) {
     try {
-      // Get current date in YYYY-MM-DD format
+      // 获取YYYY-MM-DD格式的当前日期
       const currentDate = new Date().toISOString().split('T')[0];
       
-      // Initialize token usage array for this account if it doesn't exist
+      // 如果不存在则为此账户初始化token使用数组
       if (!this.tokenUsage.has(accountId)) {
         this.tokenUsage.set(accountId, []);
       }
       
       const accountUsage = this.tokenUsage.get(accountId);
       
-      // Find existing entry for today
+      // 查找今天的现有条目
       let todayEntry = accountUsage.find(entry => entry.date === currentDate);
       
       if (todayEntry) {
-        // Update existing entry
+        // 更新现有条目
         todayEntry.inputTokens += inputTokens;
         todayEntry.outputTokens += outputTokens;
       } else {
-        // Create new entry for today
+        // 为今天创建新条目
         accountUsage.push({
           date: currentDate,
           inputTokens: inputTokens,
@@ -430,7 +435,7 @@ class QwenAPI {
         });
 }
       
-      // Schedule save instead of saving immediately
+      // 安排保存而不是立即保存
       this.scheduleSave();
     } catch (error) {
       console.warn('Failed to record token usage:', error.message);
@@ -479,7 +484,7 @@ class QwenAPI {
    * @returns {Object|null} Account info with {accountId, credentials}
    */
   async getBestAccount(exclude = new Set()) {
-    // Get all available accounts
+    // 获取所有可用账户
     const accountIds = this.authManager.getAccountIds();
     let healthyAccountIds = this.getHealthyAccounts(accountIds);
     if (exclude && exclude.size) {
@@ -493,10 +498,10 @@ class QwenAPI {
 
     console.log(`Available healthy accounts: ${healthyAccountIds.join(', ')}`);
 
-    // Load credentials for all healthy accounts and find freshest
+    // 为所有健康账户加载凭证并找到最新的
     const accountCredentials = [];
     for (const accountId of healthyAccountIds) {
-      // Accounts should already be loaded by the caller; fetch from memory
+      // 账户应已由调用方加载；从内存中获取
       const credentials = this.authManager.getAccountCredentials(accountId);
       if (credentials) {
         const minutesLeft = (credentials.expiry_date - Date.now()) / 60000;
@@ -513,19 +518,19 @@ class QwenAPI {
       return null;
     }
 
-    // Sort by freshness (freshest first)
+    // 按新鲜度排序（最新的在前）
     accountCredentials.sort((a, b) => b.minutesLeft - a.minutesLeft);
 
-    // Try accounts from freshest to least fresh
+    // 从最新到最不新鲜尝试账户
     for (const account of accountCredentials) {
       try {
         let selectedCredentials = account.credentials;
 
-        // If account is expired, try to refresh it
+        // 如果账户已过期，尝试刷新
         if (account.minutesLeft < 0) {
           console.log(`Account ${account.accountId} is expired, attempting refresh...`);
           try {
-            // Refresh and ensure credentials are saved under the correct named account
+            // 刷新并确保凭证保存在正确的命名账户下
             selectedCredentials = await this.authManager.performTokenRefresh(account.credentials, account.accountId);
             console.log(`Successfully refreshed account ${account.accountId}`);
           } catch (refreshError) {
@@ -550,14 +555,14 @@ class QwenAPI {
   }
 
   async getApiEndpoint(credentials) {
-    // Check if credentials contain a custom endpoint
+    // 检查凭证是否包含自定义端点
     if (credentials && credentials.resource_url) {
       let endpoint = credentials.resource_url;
-      // Ensure it has a scheme
+      // 确保其具有方案
       if (!endpoint.startsWith('http')) {
         endpoint = `https://${endpoint}`;
       }
-      // Ensure it has the /v1 suffix
+      // 确保其具有/v1后缀
       if (!endpoint.endsWith('/v1')) {
         if (endpoint.endsWith('/')) {
           endpoint += 'v1';
@@ -567,18 +572,18 @@ class QwenAPI {
       }
       return endpoint;
     } else {
-      // Use default endpoint
+      // 使用默认端点
       return DEFAULT_QWEN_API_BASE_URL;
     }
   }
 
   async chatCompletions(request) {
-    // Reset daily state and load accounts
+    // 重置每日状态并加载账户
     await this.resetFailedAccountsIfNeeded();
     await this.authManager.loadAllAccounts();
     const forcedAccountId = request.accountId;
     if (forcedAccountId) {
-      // Use only the specified account; refresh once before request if needed, no rotation/retry
+      // 仅使用指定账户；如果需要，在请求前刷新一次，不轮换/重试
       const creds0 = this.authManager.getAccountCredentials(forcedAccountId);
       if (!creds0) {
         throw new Error(`No credentials found for account ${forcedAccountId}`);
@@ -591,7 +596,7 @@ class QwenAPI {
       return await this.processRequestWithAccount(request, accountInfo);
     }
 
-    // Multi-account auto selection
+    // 多账户自动选择
     const accountIds = this.authManager.getAccountIds();
     if (accountIds.length === 0) {
       return this.chatCompletionsSingleAccount(request);
@@ -608,27 +613,27 @@ class QwenAPI {
       }
       
       try {
-        // Check if account is rate limited
+        // 检查账户是否受速率限制
         if (this.isAccountRateLimited(bestAccount.accountId)) {
-          // Mark account as tried and continue to the next
+          // 将账户标记为已尝试并继续下一个
           tried.add(bestAccount.accountId);
           continue;
         }
         
-        // Try to acquire lock for this account
+        // 尝试为此账户获取锁
         const lockAcquired = await this.acquireAccountLock(bestAccount.accountId);
         if (!lockAcquired) {
-          // Account is in use, skip to next attempt
+          // 账户正在使用中，跳到下一次尝试
           tried.add(bestAccount.accountId);
           continue;
         }
         
         try {
-          // Increment request count after acquiring lock but before processing
+          // 获取锁后但在处理前增加请求计数
           this.incrementAccountRequestCount(bestAccount.accountId);
           return await this.processRequestWithAccount(request, bestAccount);
         } finally {
-          // Always release the lock after request is done (success or failure)
+          // 请求完成后始终释放锁（成功或失败）
           this.releaseAccountLock(bestAccount.accountId);
         }
       } catch (error) {
@@ -649,17 +654,17 @@ class QwenAPI {
   async processRequestWithAccount(request, accountInfo) {
     const { accountId, credentials } = accountInfo;
     
-    // Show which account we're using
+    // 显示我们正在使用的账户
     console.log(`\x1b[36mUsing account ${accountId} (Request #${this.getRequestCount(accountId) + 1} today)\x1b[0m`);
     
-    // Get API endpoint
+    // 获取API端点
     const apiEndpoint = await this.getApiEndpoint(credentials);
     
-    // Make API call
+    // 进行API调用
     const url = `${apiEndpoint}/chat/completions`;
     const model = request.model || DEFAULT_MODEL;
     
-    // Process messages for vision model support
+    // 处理视觉模型支持的消息
     const processedMessages = processMessagesForVision(request.messages, model);
     
     const payload = {
@@ -685,13 +690,13 @@ class QwenAPI {
       httpsAgent
     });
 
-    // Increment request count for successful request
+    // 为成功请求增加请求计数
     await this.incrementRequestCount(accountId);
     
-    // Reset auth error count on successful request
+    // 成功请求时重置认证错误计数
     this.resetAuthErrorCount(accountId);
     
-    // Record token usage if available
+    // 如果可用则记录token使用情况
     if (response.data && response.data.usage) {
       await this.recordTokenUsage(
         accountId, 
@@ -709,14 +714,14 @@ class QwenAPI {
    */
   async handleRequestError(error, accountId) {
     if (!error.response) {
-      // Network or other non-API errors - don't mark account as failed
+      // 网络或其他非API错误 - 不将账户标记为失败
       return;
     }
 
     const status = error.response.status;
     const errorData = error.response.data || {};
     
-    // Mark account as failed for specific error types
+    // 为特定错误类型将账户标记为失败
     if (status === 429 || // Rate limit/quota exceeded
         (status === 401 && errorData.error?.message?.includes('Invalid access token')) ||
         (status === 400 && errorData.error?.message?.includes('quota'))) {
@@ -724,7 +729,7 @@ class QwenAPI {
       console.log(`\x1b[33mMarking account ${accountId} as failed due to ${status} error\x1b[0m`);
       await this.markAccountAsFailed(accountId);
     } else if (status === 401) {
-      // Try to refresh token for other 401 errors
+      // 尝试为其他401错误刷新token
       try {
         console.log(`\x1b[33mAttempting token refresh for account ${accountId}\x1b[0m`);
         const credentials = this.authManager.getAccountCredentials(accountId);
@@ -737,23 +742,23 @@ class QwenAPI {
         await this.markAccountAsFailed(accountId);
       }
     }
-    // For 500/502/504 errors, don't mark account as failed (temporary server issues)
+    // 对于500/502/504错误，不将账户标记为失败（临时服务器问题）
   }
 
   /**
    * Chat completions for single account mode
    */
   async chatCompletionsSingleAccount(request) {
-    // Get a valid access token (automatically refreshes if needed)
+    // 获取有效的访问token（如果需要会自动刷新）
     const accessToken = await this.authManager.getValidAccessToken();
     const credentials = await this.authManager.loadCredentials();
     const apiEndpoint = await this.getApiEndpoint(credentials);
     
-    // Make API call
+    // 进行API调用
     const url = `${apiEndpoint}/chat/completions`;
     const model = request.model || DEFAULT_MODEL;
     
-    // Process messages for vision model support
+    // 处理视觉模型支持的消息
     const processedMessages = processMessagesForVision(request.messages, model);
     
     const payload = {
@@ -774,10 +779,10 @@ class QwenAPI {
     
     try {
       const response = await axios.post(url, payload, { headers, timeout: 300000, httpAgent, httpsAgent }); // 5 minute timeout
-      // Reset auth error count on successful request (for consistency, even though we don't rotate)
+      // 成功请求时重置认证错误计数 (for consistency, even though we don't rotate)
       this.resetAuthErrorCount('default');
       
-      // Record token usage if available in response
+      // 如果可用则记录token使用情况 in response
       if (response.data && response.data.usage) {
         const { prompt_tokens = 0, completion_tokens = 0 } = response.data.usage;
         await this.recordTokenUsage('default', prompt_tokens, completion_tokens);
@@ -785,19 +790,19 @@ class QwenAPI {
       
       return response.data;
     } catch (error) {
-      // Check if this is an authentication error that might benefit from a retry
+      // 检查这是否是可能从重试中受益的认证错误
       if (isAuthError(error)) {
-        // Increment auth error count (for tracking, even though we can't rotate)
+        // 增加认证错误计数（用于跟踪，即使我们不能轮换）
         const authErrorCount = this.incrementAuthErrorCount('default');
         console.log(`\x1b[33mDetected auth error (${error.response?.status || 'N/A'}) (consecutive count: ${authErrorCount})\x1b[0m`);
         
         console.log('\x1b[33m%s\x1b[0m', `Attempting token refresh and retry...`);
         try {
-          // Force refresh the token and retry once
+          // 强制刷新token并重试一次
           await this.authManager.performTokenRefresh(credentials);
           const newAccessToken = await this.authManager.getValidAccessToken();
           
-          // Retry the request with the new token
+          // 使用新token重试请求
           console.log('\x1b[36m%s\x1b[0m', 'Retrying request with refreshed token...');
           const retryHeaders = {
             'Content-Type': 'application/json',
@@ -807,24 +812,24 @@ class QwenAPI {
           
           const retryResponse = await axios.post(url, payload, { headers: retryHeaders, timeout: 300000, httpAgent, httpsAgent });
           console.log('\x1b[32m%s\x1b[0m', 'Request succeeded after token refresh');
-          // Reset auth error count on successful request
+          // 成功请求时重置认证错误计数
           this.resetAuthErrorCount('default');
           return retryResponse.data;
         } catch (retryError) {
           console.error('\x1b[31m%s\x1b[0m', 'Request failed even after token refresh');
-          // If retry fails, throw the original error with additional context
+          // 如果重试失败，则抛出带有附加上下文的原始错误
           throw new Error(`Qwen API error (after token refresh attempt): ${error.response?.status || 'N/A'} ${JSON.stringify(error.response?.data || error.message)}`);
         }
       }
       
       if (error.response) {
-        // The request was made and the server responded with a status code
+        // 请求已发出，服务器响应了状态码
         throw new Error(`Qwen API error: ${error.response.status} ${JSON.stringify(error.response.data)}`);
       } else if (error.request) {
-        // The request was made but no response was received
+        // 请求已发出但未收到响应
         throw new Error(`Qwen API request failed: No response received`);
       } else {
-        // Something happened in setting up the request that triggered an Error
+        // 在设置请求时发生了触发错误的情况
         throw new Error(`Qwen API request failed: ${error.message}`);
       }
     }
@@ -837,12 +842,12 @@ class QwenAPI {
    */
   async acquireAccountLock(accountId) {
     if (!this.accountLocks.has(accountId)) {
-      // No one is using this account, acquire the lock
+      // 没有人在使用此账户，获取锁
       this.accountLocks.set(accountId, true);
       return true;
     }
     
-    // Account is currently in use, return false
+    // 账户当前正在使用中，返回false
     return false;
   }
 
@@ -865,17 +870,17 @@ class QwenAPI {
     const now = Date.now();
     const accountData = this.accountRequestCounts.get(accountId) || { count: 0, resetTime: now + this.requestWindowDuration };
     
-    // If window has passed, reset the count
+    // 如果窗口已过期，重置计数
     if (now >= accountData.resetTime) {
       accountData.count = 0;
       accountData.resetTime = now + this.requestWindowDuration;
     }
     
-    // For Qwen accounts, we'll use a default limit of 1800 requests per hour (30 per minute)
-    // But since we're checking per minute, that's 30 requests per minute
+    // 对于Qwen账户，我们将使用每小时1800个请求的默认限制（每分钟30个）
+    // 但由于我们按分钟检查，那是每分钟30个请求
     const rateLimit = 30; // requests per window
     
-    // Check if we've exceeded the rate limit
+    // 检查我们是否超过了速率限制
     if (accountData.count >= rateLimit) {
       console.log(`\x1b[33mAccount ${accountId} has exceeded rate limit (${rateLimit} requests per ${this.requestWindowDuration/1000}s window)\x1b[0m`);
       return true;
@@ -893,7 +898,7 @@ class QwenAPI {
     let accountData = this.accountRequestCounts.get(accountId);
     
     if (!accountData || now >= accountData.resetTime) {
-      // Reset the window if it has passed
+      // 如果窗口已过期则重置窗口
       accountData = { count: 0, resetTime: now + this.requestWindowDuration };
     }
     
@@ -904,7 +909,7 @@ class QwenAPI {
   async listModels() {
     const cacheKey = 'qwen_models';
     
-    // Check if models are already cached
+    // 检查模型是否已缓存
     const cachedModels = staticDataCache.get(cacheKey);
     if (cachedModels) {
       console.log('Returning cached models list');
@@ -913,13 +918,13 @@ class QwenAPI {
     
     console.log('Returning mock models list');
     
-    // Create models response
+    // 创建模型响应
     const modelsResponse = {
       object: 'list',
       data: QWEN_MODELS
     };
     
-    // Cache the models for 1 hour
+    // 缓存模型1小时
     staticDataCache.set(cacheKey, modelsResponse, 60 * 60 * 1000); // 1 hour
     
     return modelsResponse;
@@ -933,7 +938,7 @@ class QwenAPI {
    * @returns {Promise<Stream>} - A stream of SSE events
    */
   async streamChatCompletions(request) {
-    // Reset daily state and load accounts
+    // 重置每日状态并加载账户
     await this.resetFailedAccountsIfNeeded();
     await this.authManager.loadAllAccounts();
     const forcedAccountId = request.accountId;
@@ -959,7 +964,7 @@ class QwenAPI {
     }
 
     if (accountIds.length === 0) {
-      // Use default single account mode
+      // 使用默认单账户模式
       const accessToken = await this.authManager.getValidAccessToken();
       const credentials = await this.authManager.loadCredentials();
       const apiEndpoint = await this.getApiEndpoint(credentials);
@@ -974,7 +979,7 @@ class QwenAPI {
       return stream;
     }
 
-    // Two-attempt rotation with account locking and rate limiting
+    // 两次尝试轮换，带账户锁定和速率限制
     const tried = new Set();
     let lastError = null;
     for (let i = 0; i < 2; i++) {
@@ -983,17 +988,17 @@ class QwenAPI {
       const { accountId, credentials } = bestAccount;
       
       try {
-        // Check if account is rate limited
+        // 检查账户是否受速率限制
         if (this.isAccountRateLimited(accountId)) {
-          // Mark account as tried and continue to the next
+          // 将账户标记为已尝试并继续下一个
           tried.add(accountId);
           continue;
         }
         
-        // Try to acquire lock for this account
+        // 尝试为此账户获取锁
         const lockAcquired = await this.acquireAccountLock(accountId);
         if (!lockAcquired) {
-          // Account is in use, skip to next attempt
+          // 账户正在使用中，跳到下一次尝试
           tried.add(accountId);
           continue;
         }
@@ -1007,14 +1012,14 @@ class QwenAPI {
           const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${credentials.access_token}`, 'User-Agent': 'QwenOpenAIProxy/1.0.0 (linux; x64)', 'Accept': 'text/event-stream' };
           const stream = new PassThrough();
           
-          // Increment request count after acquiring lock but before processing
+          // 获取锁后但在处理前增加请求计数
           this.incrementAccountRequestCount(accountId);
           
           const response = await axios.post(url, payload, { headers, timeout: 300000, responseType: 'stream', httpAgent, httpsAgent });
           response.data.pipe(stream);
           return stream;
         } finally {
-          // Always release the lock after request is done (success or failure)
+          // 请求完成后始终释放锁（成功或失败）
           this.releaseAccountLock(accountId);
         }
       } catch (error) {

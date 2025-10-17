@@ -193,7 +193,7 @@ export ANTHROPIC_API_KEY=your-fake-api-key
 
 如果您只使用 Claude Code，我们提供了一个精简版本，仅包含 Claude Code 需要的端点和模型。要使用这个优化版本：
 
-1. 确保您使用的是已移除 `/v2` 端点、仅保留 `/anthropic/v1` 端点的配置
+1. 确保您使用的是仅保留 `/anthropic/v1` 端点的配置
 2. 所有 API 通信将通过 `http://localhost:8765/anthropic` 端点处理
 3. 模型列表已精简，只包含 Claude Code 2.0+ 版本会使用的模型
 

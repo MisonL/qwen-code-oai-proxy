@@ -1,7 +1,10 @@
+/**
+ * Qwen 认证管理器测试
+ * 测试 Qwen OAuth 认证流程和凭证管理功能
+ */
+
 const { QwenAuthManager } = require('../../src/qwen/auth.js');
 const path = require('path');
-
-// Mock dependencies
 jest.mock('fs');
 jest.mock('undici');
 jest.mock('crypto');
@@ -60,15 +63,15 @@ describe('QwenAuthManager', () => {
 
   describe('generatePKCEPair', () => {
     it('should generate code verifier and challenge', () => {
-      // We can't directly test the private functions, but we can test their usage through public methods
-      // The functions are already in the source file
+      // 我们无法直接测试私有函数，但可以通过公共方法测试它们的使用
+      // 函数已在源文件中
       expect(authManager).toBeDefined();
     });
   });
 
   describe('loadAllAccounts', () => {
     it('should load all multi-account credentials', async () => {
-      // Mock fs.readdir to return some account files
+      // 模拟fs.readdir以返回一些账户文件
       const mockFiles = [
         'oauth_creds.json', // default file
         'oauth_creds_account1.json',
@@ -77,7 +80,7 @@ describe('QwenAuthManager', () => {
       
       fs.readdir.mockResolvedValue(mockFiles);
       
-      // Mock fs.readFile to return valid credentials
+      // 模拟fs.readFile以返回有效凭证
       fs.readFile
         .mockResolvedValueOnce(JSON.stringify({ 
           access_token: 'token1', 

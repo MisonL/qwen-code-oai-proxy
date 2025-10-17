@@ -1,11 +1,16 @@
 /**
- * Environment validation utility
- * Validates all required environment variables at startup
+ * 环境验证工具
+ * 在启动时验证所有必需的环境变量
+ */
+
+/**
+ * 环境验证工具
+ * 在启动时验证所有必需的环境变量
  */
 
 const requiredEnvVars = [
-  // Add any truly required environment variables here
-  // For this proxy, most config values have defaults, so we don't require any
+  // 在这里添加任何真正必需的环境变量
+  // 对于此代理，大多数配置值都有默认值，所以我们不需要必需的环境变量
 ];
 
 const allowedEnvVars = [
@@ -29,34 +34,34 @@ const allowedEnvVars = [
 ];
 
 function validateEnvironment() {
-  // Check for missing required environment variables
+  // 检查缺失的必需环境变量
   const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
   
   if (missingEnvVars.length > 0) {
-    console.error('Missing required environment variables:', missingEnvVars.join(', '));
+    console.error('缺少必需的环境变量:', missingEnvVars.join(', '));
     process.exit(1);
   }
 
-  // Validate environment variable formats
-  // PORT should be a number
+  // 验证环境变量格式
+  // PORT 应该是数字
   if (process.env.PORT && isNaN(parseInt(process.env.PORT, 10))) {
-    console.error('PORT environment variable must be a number');
+    console.error('PORT 环境变量必须是数字');
     process.exit(1);
   }
 
-  // LOG_FILE_LIMIT should be a number
+  // LOG_FILE_LIMIT 应该是数字
   if (process.env.LOG_FILE_LIMIT && isNaN(parseInt(process.env.LOG_FILE_LIMIT, 10))) {
-    console.error('LOG_FILE_LIMIT environment variable must be a number');
+    console.error('LOG_FILE_LIMIT 环境变量必须是数字');
     process.exit(1);
   }
 
-  // TOKEN_REFRESH_BUFFER should be a number
+  // TOKEN_REFRESH_BUFFER 应该是数字
   if (process.env.TOKEN_REFRESH_BUFFER && isNaN(parseInt(process.env.TOKEN_REFRESH_BUFFER, 10))) {
-    console.error('TOKEN_REFRESH_BUFFER environment variable must be a number');
+    console.error('TOKEN_REFRESH_BUFFER 环境变量必须是数字');
     process.exit(1);
   }
 
-  // Check for any environment variables that aren't in the allowed list (in production)
+  // 检查生产环境中不在允许列表中的环境变量
   if (process.env.NODE_ENV === 'production') {
     const allEnvVars = Object.keys(process.env);
     const unexpectedEnvVars = allEnvVars.filter(envVar => 
@@ -64,19 +69,19 @@ function validateEnvironment() {
     );
     
     if (unexpectedEnvVars.length > 0) {
-      console.warn('Unexpected environment variables in production:', unexpectedEnvVars.join(', '));
+      console.warn('生产环境中的意外环境变量:', unexpectedEnvVars.join(', '));
     }
   }
 
-  // Validate boolean environment variables
+  // 验证布尔环境变量
   const booleanEnvVars = ['STREAM', 'DEBUG_LOG', 'QWEN_CODE_AUTH_USE'];
   for (const envVar of booleanEnvVars) {
     if (process.env[envVar] && !['true', 'false', '1', '0', ''].includes(process.env[envVar].toLowerCase())) {
-      console.warn(`Warning: ${envVar} environment variable has an unexpected value: ${process.env[envVar]}. Expected values: 'true', 'false', '1', '0', or empty.`);
+      console.warn(`警告: ${envVar} 环境变量有意外的值: ${process.env[envVar]}。期望值: 'true', 'false', '1', '0', 或空。`);
     }
   }
 
-  console.log('Environment validation passed');
+  console.log('环境验证通过');
 }
 
 module.exports = { validateEnvironment };

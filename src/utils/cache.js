@@ -1,13 +1,18 @@
+/**
+ * 缓存工具
+ * 提供带有过期时间的内存缓存功能
+ */
+
 class Cache {
   constructor() {
     this.cache = new Map();
-    this.timers = new Map(); // To track timeouts for cache expiration
+    this.timers = new Map(); // 用于跟踪缓存过期的超时
   }
 
   /**
-   * Get value from cache
-   * @param {string} key - Cache key
-   * @returns {*} Cached value or undefined if not found/expired
+   * 从缓存中获取值
+   * @param {string} key - 缓存键
+   * @returns {*} 缓存的值，如果未找到或已过期则返回undefined
    */
   get(key) {
     if (this.cache.has(key)) {
@@ -17,21 +22,21 @@ class Cache {
   }
 
   /**
-   * Set value in cache with TTL (time-to-live)
-   * @param {string} key - Cache key
-   * @param {*} value - Value to cache
-   * @param {number} ttl - Time-to-live in milliseconds (default: 5 minutes)
+   * 在缓存中设置值并指定TTL（生存时间）
+   * @param {string} key - 缓存键
+   * @param {*} value - 要缓存的值
+   * @param {number} ttl - 以毫秒为单位的生存时间（默认：5分钟）
    */
-  set(key, value, ttl = 5 * 60 * 1000) { // Default to 5 minutes
-    // Clear existing timeout if any
+  set(key, value, ttl = 5 * 60 * 1000) { // 默认为5分钟
+    // 清除现有的超时
     if (this.timers.has(key)) {
       clearTimeout(this.timers.get(key));
     }
 
-    // Set new value
+    // 设置新值
     this.cache.set(key, value);
 
-    // Set expiration timer
+    // 设置过期定时器
     const timer = setTimeout(() => {
       this.delete(key);
     }, ttl);
@@ -40,8 +45,8 @@ class Cache {
   }
 
   /**
-   * Delete value from cache
-   * @param {string} key - Cache key
+   * 从缓存中删除值
+   * @param {string} key - 缓存键
    */
   delete(key) {
     if (this.timers.has(key)) {
@@ -53,7 +58,7 @@ class Cache {
   }
 
   /**
-   * Clear all cache
+   * 清空所有缓存
    */
   clear() {
     for (const timer of this.timers.values()) {
@@ -64,17 +69,17 @@ class Cache {
   }
 
   /**
-   * Check if key exists in cache
-   * @param {string} key - Cache key
-   * @returns {boolean} True if key exists and hasn't expired
+   * 检查键是否存在于缓存中
+   * @param {string} key - 缓存键
+   * @returns {boolean} 如果键存在且未过期则返回true
    */
   has(key) {
     return this.cache.has(key);
   }
 
   /**
-   * Get cache size
-   * @returns {number} Number of cached items
+   * 获取缓存大小
+   * @returns {number} 缓存项的数量
    */
   size() {
     return this.cache.size;

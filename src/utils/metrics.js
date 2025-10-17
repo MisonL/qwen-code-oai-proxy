@@ -1,31 +1,36 @@
 const client = require('prom-client');
 
-// Create a Registry which registers all metrics
+/**
+ * 指标收集工具
+ * 收集和暴露Prometheus指标
+ */
+
+// 创建注册所有指标的注册表
 const register = new client.Registry();
 
-// Add default metrics
+// 添加默认指标
 client.collectDefaultMetrics({
   register,
   prefix: 'qwen_proxy_'
 });
 
-// Define custom metrics
+// 定义自定义指标
 const httpRequestTotal = new client.Counter({
   name: 'qwen_proxy_http_requests_total',
-  help: 'Total number of HTTP requests',
+  help: 'HTTP请求总数',
   labelNames: ['method', 'route', 'status_code']
 });
 
 const httpRequestDuration = new client.Histogram({
   name: 'qwen_proxy_http_request_duration_seconds',
-  help: 'Duration of HTTP requests in seconds',
+  help: 'HTTP请求持续时间（秒）',
   labelNames: ['method', 'route'],
-  buckets: [0.1, 0.5, 1, 2, 5, 10] // 0.1s, 0.5s, 1s, 2s, 5s, 10s
+  buckets: [0.1, 0.5, 1, 2, 5, 10] // 0.1秒, 0.5秒, 1秒, 2秒, 5秒, 10秒
 });
 
 const apiRequestsTotal = new client.Counter({
   name: 'qwen_proxy_api_requests_total',
-  help: 'Total number of API requests to Qwen',
+  help: 'Qwen的API请求总数',
   labelNames: ['api_type', 'model', 'account_id']
 });
 
@@ -52,7 +57,7 @@ const requestQueueSize = new client.Gauge({
   help: 'Size of the request queue'
 });
 
-// Register custom metrics
+// 注册自定义指标
 register.registerMetric(httpRequestTotal);
 register.registerMetric(httpRequestDuration);
 register.registerMetric(apiRequestsTotal);
@@ -73,7 +78,7 @@ class MetricsCollector {
     this.requestQueueSize = requestQueueSize;
   }
 
-  // Increment HTTP request counter
+  // 增加HTTP请求计数器
   incrementHttpRequest(method, route, statusCode) {
     this.httpRequestTotal.inc({
       method: method.toUpperCase(),
@@ -82,7 +87,7 @@ class MetricsCollector {
     });
   }
 
-  // Record HTTP request duration
+  // 记录HTTP请求持续时间
   recordHttpRequestDuration(method, route, durationInSeconds) {
     this.httpRequestDuration.observe({
       method: method.toUpperCase(),
@@ -90,7 +95,7 @@ class MetricsCollector {
     }, durationInSeconds);
   }
 
-  // Increment API request counter
+  // 增加API请求计数器
   incrementApiRequest(apiType, model, accountId) {
     this.apiRequestsTotal.inc({
       api_type: apiType,
@@ -99,7 +104,7 @@ class MetricsCollector {
     });
   }
 
-  // Record API request duration
+  // 记录API请求持续时间
   recordApiRequestDuration(apiType, model, accountId, durationInSeconds) {
     this.apiRequestDuration.observe({
       api_type: apiType,
@@ -108,7 +113,7 @@ class MetricsCollector {
     }, durationInSeconds);
   }
 
-  // Record token usage
+  // 记录token使用情况
   recordTokenUsage(type, model, accountId, count) {
     this.tokenUsageTotal.inc({
       type,
@@ -117,22 +122,22 @@ class MetricsCollector {
     }, count);
   }
 
-  // Set active connections count
+  // 设置活动连接数
   setActiveConnections(count) {
     this.activeConnections.set(count);
   }
 
-  // Set request queue size
+  // 设置请求队列大小
   setRequestQueueSize(count) {
     this.requestQueueSize.set(count);
   }
 
-  // Get metrics for Prometheus endpoint
+  // 获取Prometheus端点的指标
   async getMetrics() {
     return await this.register.metrics();
   }
 
-  // Reset all metrics (useful for testing)
+  // 重置所有指标（对测试有用）
   resetMetrics() {
     this.register.resetMetrics();
   }

@@ -13,11 +13,11 @@ const { ErrorFormatter } = require('./utils/errorFormatter.js');
 const { MetricsCollector } = require('./utils/metrics.js');
 const { AnthropicProxy } = require('./anthropic/anthropicProxy.js');
 
-// Validate environment at startup
+// 启动时验证环境
 validateEnvironment();
 
 const app = express();
-// Add security headers
+// 添加安全头
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -25,11 +25,11 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
       scriptSrc: ["'self'"],
-      frameAncestors: ["'none'"], // Prevents iframing
+      frameAncestors: ["'none'"], // 防止iframe嵌入
     },
   },
   hsts: {
-    maxAge: 31536000, // 1 year in seconds
+    maxAge: 31536000, // 1年（以秒为单位）
     includeSubDomains: true,
     preload: true
   },
@@ -41,39 +41,39 @@ app.use(helmet({
   }
 }));
 
-// Rate limiting middleware
+// 速率限制中间件
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000, // 15分钟
+  max: 100, // 每个IP在时间窗口内最多100个请求
   message: {
     error: {
       type: 'rate_limit_error',
-      message: 'Too many requests from this IP, please try again later.'
+      message: '来自此IP的请求过多，请稍后再试。'
     }
   },
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  standardHeaders: true, // 在 `RateLimit-*` 头中返回速率限制信息
+  legacyHeaders: false, // 禁用 `X-RateLimit-*` 头
   skip: function(req, res) {
-    // Skip rate limiting for health check and metrics endpoints
+    // 对健康检查和指标端点跳过速率限制
     return req.url === '/health' || req.url === '/metrics';
   }
 });
 
-// Apply rate limiting to all requests except health and metrics
+// 对除健康检查和指标外的所有请求应用速率限制
 app.use(limiter);
 
-// Increase body parser limits for large requests
+// 增加大型请求的主体解析器限制
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// Configure more restrictive CORS
+// 配置更严格的CORS
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
+    // 允许没有来源的请求（如移动应用或curl请求）
     if (!origin) return callback(null, true);
     
-    // In production, you should specify your allowed origins explicitly
-    // For now, we'll be more restrictive than the default wildcard
+    // 在生产环境中，您应该明确指定允许的来源
+    // 现在，我们将比默认的通配符更加严格
     const allowedOrigins = [
       'http://localhost:3000',    // Common frontend port
       'http://localhost:3001',    // Another common frontend port
@@ -89,10 +89,10 @@ app.use(cors({
       'https://localhost:8081',   // HTTPS localhost
     ];
     
-    // For production, you'd want to check if origin is in allowedOrigins
-    // For now, we'll allow any localhost origin for development
+    // 对于生产环境，您需要检查来源是否在allowedOrigins中
+    // 现在，我们将允许任何localhost来源用于开发
     if (process.env.NODE_ENV === 'production') {
-      // In production, restrict to specific origins
+      // 在生产环境中，限制为特定来源
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -100,7 +100,7 @@ app.use(cors({
         callback(new Error('Not allowed by CORS'));
       }
     } else {
-      // In development, allow localhost origins
+      // 在开发环境中，允许localhost来源
       if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
         callback(null, true);
       } else {
@@ -123,45 +123,49 @@ app.use(cors({
   exposedHeaders: ['X-Total-Count', 'Link']  // Headers that browsers can access
 }));
 
-// Additional rate limiting for API endpoints with stricter limits
+// 对API端点应用更严格的速率限制
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // Limit each IP to 50 requests per windowMs to API endpoints
+  windowMs: 15 * 60 * 1000, // 15分钟
+  max: 50, // 每个IP在时间窗口内对API端点最多50个请求
   message: {
     error: {
       type: 'rate_limit_error',
-      message: 'Too many API requests from this IP, please try again later.'
+      message: '来自此IP的API请求过多，请稍后再试。'
     }
   },
   skip: function(req, res) {
-    // Skip rate limiting for health check and metrics endpoints
+    // 对健康检查和指标端点跳过速率限制
     return req.url === '/health' || req.url === '/metrics';
   }
 });
 
-// Apply stricter rate limiting to API endpoints
+// 对API端点应用更严格的速率限制
 app.use('/v1', apiLimiter);
 app.use('/anthropic', apiLimiter);
 
-// Initialize Qwen API client
+// 初始化Qwen API客户端
 const qwenAPI = new QwenAPI();
 const authManager = new QwenAuthManager();
 const debugLogger = new DebugLogger();
 const metricsCollector = new MetricsCollector();
 
-// Main proxy server
+/**
+ * 主代理服务器
+ * 
+ * @class QwenOpenAIProxy
+ */
 class QwenOpenAIProxy {
   constructor(metricsCollector = null) {
     this.metricsCollector = metricsCollector;
     
-    // Define Joi schemas for input validation
+    // 定义Joi模式用于输入验证
     this.chatCompletionSchema = Joi.object({
-      model: Joi.string().max(100).required(), // Now required and with max length
+      model: Joi.string().max(100).required(), // 现在是必需的，并有最大长度
       messages: Joi.array().items(
         Joi.object({
           role: Joi.string().valid('system', 'user', 'assistant').required(),
           content: Joi.alternatives().try(
-            Joi.string().max(1000000), // Max 1MB for content
+            Joi.string().max(1000000), // 内容最大1MB
             Joi.array().items(
               Joi.object({
                 type: Joi.string().valid('text', 'image_url').required(),
@@ -173,11 +177,11 @@ class QwenOpenAIProxy {
             )
           ).required()
         })
-      ).min(1).max(100).required(), // Max 100 messages
-      temperature: Joi.number().min(0).max(2).precision(2).optional(), // Added precision
+      ).min(1).max(100).required(), // 最多100条消息
+      temperature: Joi.number().min(0).max(2).precision(2).optional(), // 添加精度
       max_tokens: Joi.number().integer().min(1).max(32768).optional(),
       top_p: Joi.number().min(0).max(1).precision(2).optional(),
-      top_k: Joi.number().integer().min(0).max(100).optional(), // Added top_k validation
+      top_k: Joi.number().integer().min(0).max(100).optional(), // 添加top_k验证
       stop: Joi.alternatives().try(
         Joi.string().max(100),
         Joi.array().items(Joi.string().max(100)).max(4)
@@ -185,112 +189,123 @@ class QwenOpenAIProxy {
       presence_penalty: Joi.number().min(-2).max(2).precision(2).optional(),
       frequency_penalty: Joi.number().min(-2).max(2).precision(2).optional(),
       logit_bias: Joi.object().pattern(Joi.string(), Joi.number().min(-100).max(100)).optional(),
-      user: Joi.string().max(255).optional(), // For abuse detection
-      tools: Joi.array().items(Joi.object()).max(10).optional(), // Max 10 tools
+      user: Joi.string().max(255).optional(), // 用于滥用检测
+      tools: Joi.array().items(Joi.object()).max(10).optional(), // 最多10个工具
       tool_choice: Joi.alternatives().try(
         Joi.string().valid('none', 'auto', 'required'),
         Joi.object()
       ).optional(),
       stream: Joi.boolean().optional(),
-      n: Joi.number().integer().min(1).max(10).optional(), // Number of completions
+      n: Joi.number().integer().min(1).max(10).optional(), // 完成数量
       account: Joi.string().max(100).optional()
     }).required();
 
     this.authPollSchema = Joi.object({
-      device_code: Joi.string().length(36).required(), // Typically UUID format
-      code_verifier: Joi.string().min(43).max(128).required() // PKCE code verifier length
+      device_code: Joi.string().length(36).required(), // 通常是UUID格式
+      code_verifier: Joi.string().min(43).max(128).required() // PKCE代码验证器长度
     });
   }
 
-  // Validate request against schema
+  // 根据模式验证请求
   validateRequest(schema, data) {
     const { error, value } = schema.validate(data, { abortEarly: false });
     if (error) {
       const errorDetails = error.details.map(detail => detail.message).join(', ');
-      throw new Error(`Validation error: ${errorDetails}`);
+      throw new Error(`验证错误: ${errorDetails}`);
     }
     return value;
   }
+  /**
+   * 处理聊天完成请求
+   * @param {Object} req - Express 请求对象
+   * @param {Object} res - Express 响应对象
+   */
   async handleChatCompletion(req, res) {
     const startTime = Date.now();
     
     try {
-      // Validate the request body
+      // 验证请求体
       const validatedBody = this.validateRequest(this.chatCompletionSchema, req.body);
 
-      // Count tokens in the request
+      // 计算请求中的token数量
       const tokenCount = countTokens(validatedBody.messages);
       
-      // Display token count in terminal
-      console.log('\x1b[36m%s\x1b[0m', `Chat completion request received with ${tokenCount} tokens`);
+      // 在终端显示token计数
+      console.log('\x1b[36m%s\x1b[0m', `收到聊天完成请求，包含 ${tokenCount} 个token`);
       
-      // Check if streaming is requested and enabled
+      // 检查是否请求并启用了流式传输
       const isStreaming = validatedBody.stream === true && config.stream;
       
       if (isStreaming) {
-        // Handle streaming response
+        // 处理流式响应
         await this.handleStreamingChatCompletion(req, res, validatedBody);
       } else {
-        // Handle regular response
-        // If client requested streaming but it's disabled, we still use regular completion
+        // 处理常规响应
+        // 如果客户端请求流式传输但已禁用，我们仍使用常规完成
         await this.handleRegularChatCompletion(req, res, validatedBody);
       }
       
-      // Record successful request metrics
+      // 记录成功的请求指标
       if (this.metricsCollector) {
-        const duration = (Date.now() - startTime) / 1000; // Convert to seconds
+        const duration = (Date.now() - startTime) / 1000; // 转换为秒
         this.metricsCollector.incrementHttpRequest(req.method, req.route.path || req.path, 200);
         this.metricsCollector.recordHttpRequestDuration(req.method, req.route.path || req.path, duration);
       }
     } catch (error) {
-      // Record error request metrics
+      // 记录错误请求指标
       if (this.metricsCollector) {
-        const duration = (Date.now() - startTime) / 1000; // Convert to seconds
+        const duration = (Date.now() - startTime) / 1000; // 转换为秒
         const statusCode = error.message.includes('Validation error') ? 400 : 
                           (error.message.includes('Not authenticated') || error.message.includes('access token')) ? 401 : 500;
         this.metricsCollector.incrementHttpRequest(req.method, req.route.path || req.path, statusCode);
         this.metricsCollector.recordHttpRequestDuration(req.method, req.route.path || req.path, duration);
       }
       
-      // Check if it's a validation error
+      // 检查是否为验证错误
       if (error.message.includes('Validation error')) {
-        console.error('\x1b[31m%s\x1b[0m', `Validation error: ${error.message}`);
+        console.error('\x1b[31m%s\x1b[0m', `验证错误: ${error.message}`);
         const validationError = ErrorFormatter.openAIValidationError(error.message);
         return res.status(validationError.status).json(validationError.body);
       }
 
-      // Log the API call with error
+      // 记录带错误的API调用
       const debugFileName = await debugLogger.logApiCall('/v1/chat/completions', req, null, error);
       
-      // Also log detailed error separately
+      // 单独记录详细错误
       await debugLogger.logError('/v1/chat/completions', error, 'error');
       
-      // Print error message in red
+      // 以红色打印错误消息
       if (debugFileName) {
-        console.error('\x1b[31m%s\x1b[0m', `Error processing chat completion request. Debug log saved to: ${debugFileName}`);
+        console.error('\x1b[31m%s\x1b[0m', `处理聊天完成请求时出错。调试日志保存到: ${debugFileName}`);
       } else {
-        console.error('\x1b[31m%s\x1b[0m', 'Error processing chat completion request.');
+        console.error('\x1b[31m%s\x1b[0m', '处理聊天完成请求时出错。');
       }
       
-      // Handle authentication errors
+      // 处理认证错误
       if (error.message.includes('Not authenticated') || error.message.includes('access token')) {
         const authError = ErrorFormatter.openAIAuthError();
         return res.status(authError.status).json(authError.body);
       }
       
-      // Handle other errors
+      // 处理其他错误
       const apiError = ErrorFormatter.openAIApiError(error.message);
       res.status(apiError.status).json(apiError.body);
     }
   }
   
+  /**
+   * 处理常规聊天完成请求
+   * @param {Object} req - Express 请求对象
+   * @param {Object} res - Express 响应对象
+   * @param {Object} validatedBody - 验证后的请求体
+   */
   async handleRegularChatCompletion(req, res, validatedBody) {
     const startTime = Date.now();
     const accountId = req.headers['x-qwen-account'] || req.query.account || req.body.account;
     const model = validatedBody.model || config.defaultModel;
     
     try {
-      // Call Qwen API through our integrated client
+      // 通过我们的集成客户端调用Qwen API
       const response = await qwenAPI.chatCompletions({
         model: model,
         messages: validatedBody.messages,
@@ -302,82 +317,88 @@ class QwenOpenAIProxy {
         accountId
       });
       
-      // Record successful API request metrics
+      // 记录成功的API请求指标
       if (this.metricsCollector) {
-        const duration = (Date.now() - startTime) / 1000; // Convert to seconds
+        const duration = (Date.now() - startTime) / 1000; // 转换为秒
         this.metricsCollector.incrementApiRequest('openai', model, accountId);
         this.metricsCollector.recordApiRequestDuration('openai', model, accountId, duration);
       }
       
-      // Log the API call
+      // 记录API调用
       const debugFileName = await debugLogger.logApiCall('/v1/chat/completions', req, response);
       
-      // Display token usage if available in response
+      // 如果响应中包含使用情况，则显示token使用情况
       let tokenInfo = '';
       if (response && response.usage) {
         const { prompt_tokens, completion_tokens, total_tokens } = response.usage;
-        tokenInfo = ` (Prompt: ${prompt_tokens}, Completion: ${completion_tokens}, Total: ${total_tokens} tokens)`;
+        tokenInfo = ` (提示: ${prompt_tokens}, 完成: ${completion_tokens}, 总计: ${total_tokens} tokens)`;
         
-        // Record token usage metrics if metrics collector is available
+        // 如果指标收集器可用，则记录token使用指标
         if (this.metricsCollector) {
           this.metricsCollector.recordTokenUsage('input', model, accountId, prompt_tokens);
           this.metricsCollector.recordTokenUsage('output', model, accountId, completion_tokens);
         }
       }
       
-      // Print success message with debug file info in green
+      // 以绿色打印成功消息和调试文件信息
       if (debugFileName) {
-        console.log('\x1b[32m%s\x1b[0m', `Chat completion request processed successfully${tokenInfo}. Debug log saved to: ${debugFileName}`);
+        console.log('\x1b[32m%s\x1b[0m', `聊天完成请求处理成功${tokenInfo}。调试日志保存到: ${debugFileName}`);
       } else {
-        console.log('\x1b[32m%s\x1b[0m', `Chat completion request processed successfully${tokenInfo}.`);
+        console.log('\x1b[32m%s\x1b[0m', `聊天完成请求处理成功${tokenInfo}。`);
       }
       
       res.json(response);
     } catch (error) {
-      // Record failed API request metrics
+      // 记录失败的API请求指标
       if (this.metricsCollector) {
-        const duration = (Date.now() - startTime) / 1000; // Convert to seconds
+        const duration = (Date.now() - startTime) / 1000; // 转换为秒
         this.metricsCollector.incrementApiRequest('openai', model, accountId);
         this.metricsCollector.recordApiRequestDuration('openai', model, accountId, duration);
       }
       
-      // Log the API call with error
+      // 记录带错误的API调用
       const debugFileName = await debugLogger.logApiCall('/v1/chat/completions', req, null, error);
       
-      // Also log detailed error separately
+      // 单独记录详细错误
       await debugLogger.logError('/v1/chat/completions regular', error, 'error');
       
-      // Print error message in red
+      // 以红色打印错误消息
       if (debugFileName) {
-        console.error('\x1b[31m%s\x1b[0m', `Error in regular chat completion request. Debug log saved to: ${debugFileName}`);
+        console.error('\x1b[31m%s\x1b[0m', `常规聊天完成请求出错。调试日志保存到: ${debugFileName}`);
       } else {
-        console.error('\x1b[31m%s\x1b[0m', 'Error in regular chat completion request.');
+        console.error('\x1b[31m%s\x1b[0m', '常规聊天完成请求出错。');
       }
       
-      // Handle authentication errors
+      // 处理认证错误
       if (error.message.includes('Not authenticated') || error.message.includes('access token')) {
         const authError = ErrorFormatter.openAIAuthError();
         return res.status(authError.status).json(authError.body);
       }
       
-      // Re-throw to be handled by the main handler
+      // 重新抛出，由主处理器处理
       throw error;
     }
   }
   
+  /**
+   * 处理流式聊天完成请求
+   * @param {Object} req - Express 请求对象
+   * @param {Object} res - Express 响应对象
+   * @param {Object} validatedBody - 验证后的请求体
+   */
   async handleStreamingChatCompletion(req, res, validatedBody) {
     const startTime = Date.now();
     const accountId = req.headers['x-qwen-account'] || req.query.account || req.body.account;
     const model = validatedBody.model || config.defaultModel;
     
     try {
-      // Set streaming headers
+      // 设置流式传输头
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('Access-Control-Allow-Origin', '*');
       
-      // Call Qwen API streaming method
+      // 调用Qwen API流式方法
       const stream = await qwenAPI.streamChatCompletions({
         model: model,
         messages: validatedBody.messages,
@@ -389,25 +410,25 @@ class QwenOpenAIProxy {
         accountId
       });
       
-      // Record successful API request metrics (at the start of streaming)
+      // 记录成功的API请求指标（在流式传输开始时）
       if (this.metricsCollector) {
-        const duration = (Date.now() - startTime) / 1000; // Convert to seconds at the start
+        const duration = (Date.now() - startTime) / 1000; // 在开始时转换为秒
         this.metricsCollector.incrementApiRequest('openai_streaming', model, accountId);
         this.metricsCollector.recordApiRequestDuration('openai_streaming', model, accountId, duration);
       }
       
-      // Log the API call (without response data since it's streaming)
+      // 记录API调用（没有响应数据，因为是流式传输）
       const debugFileName = await debugLogger.logApiCall('/v1/chat/completions', req, { streaming: true });
       
-      // Print streaming request message
-      console.log('\x1b[32m%s\x1b[0m', `Streaming chat completion request started. Debug log saved to: ${debugFileName}`);
+      // 打印流式请求消息
+      console.log('\x1b[32m%s\x1b[0m', `流式聊天完成请求已开始。调试日志保存到: ${debugFileName}`);
       
-      // Pipe the stream to the response
+      // 将流传输到响应
       stream.pipe(res);
       
-      // Handle stream errors
+      // 处理流错误
       stream.on('error', (error) => {
-        console.error('\x1b[31m%s\x1b[0m', `Error in streaming chat completion: ${error.message}`);
+        console.error('\x1b[31m%s\x1b[0m', `流式聊天完成出错: ${error.message}`);
         if (!res.headersSent) {
           const apiError = ErrorFormatter.openAIApiError(error.message, 'streaming_error');
           res.status(apiError.status).json(apiError.body);
@@ -415,33 +436,33 @@ class QwenOpenAIProxy {
         res.end();
       });
       
-      // Handle client disconnect
+      // 处理客户端断开连接
       req.on('close', () => {
         stream.destroy();
       });
       
     } catch (error) {
-      // Record failed API request metrics
+      // 记录失败的API请求指标
       if (this.metricsCollector) {
-        const duration = (Date.now() - startTime) / 1000; // Convert to seconds
+        const duration = (Date.now() - startTime) / 1000; // 转换为秒
         this.metricsCollector.incrementApiRequest('openai_streaming', model, accountId);
         this.metricsCollector.recordApiRequestDuration('openai_streaming', model, accountId, duration);
       }
       
-      // Log the API call with error
+      // 记录带错误的API调用
       const debugFileName = await debugLogger.logApiCall('/v1/chat/completions', req, null, error);
       
-      // Also log detailed error separately
+      // 单独记录详细错误
       await debugLogger.logError('/v1/chat/completions streaming', error, 'error');
       
-      // Print error message in red
+      // 以红色打印错误消息
       if (debugFileName) {
-        console.error('\x1b[31m%s\x1b[0m', `Error in streaming chat completion request. Debug log saved to: ${debugFileName}`);
+        console.error('\x1b[31m%s\x1b[0m', `流式聊天完成请求出错。调试日志保存到: ${debugFileName}`);
       } else {
-        console.error('\x1b[31m%s\x1b[0m', 'Error in streaming chat completion request.');
+        console.error('\x1b[31m%s\x1b[0m', '流式聊天完成请求出错。');
       }
       
-      // Handle authentication errors
+      // 处理认证错误
       if (error.message.includes('Not authenticated') || error.message.includes('access token')) {
         const authError = ErrorFormatter.openAIAuthError();
         if (!res.headersSent) {
@@ -451,7 +472,7 @@ class QwenOpenAIProxy {
         return;
       }
       
-      // For other errors in streaming context
+      // 处理流式传输上下文中的其他错误
       const apiError = ErrorFormatter.openAIApiError(error.message);
       if (!res.headersSent) {
         res.status(apiError.status).json(apiError.body);
@@ -460,40 +481,45 @@ class QwenOpenAIProxy {
     }
   }
   
+  /**
+   * 处理模型列表请求
+   * @param {Object} req - Express 请求对象
+   * @param {Object} res - Express 响应对象
+   */
   async handleModels(req, res) {
     try {
-      // Display request in terminal
-      console.log('\x1b[36m%s\x1b[0m', 'Models request received');
+      // 在终端显示请求
+      console.log('\x1b[36m%s\x1b[0m', '模型请求已收到');
       
-      // Get models from Qwen
+      // 从Qwen获取模型
       const models = await qwenAPI.listModels();
-      // Log the API call
+      // 记录API调用
       const debugFileName = await debugLogger.logApiCall('/v1/models', req, models);
       
-      // Print success message with debug file info in green
+      // 以绿色打印成功消息和调试文件信息
       if (debugFileName) {
-        console.log('\x1b[32m%s\x1b[0m', `Models request processed successfully. Debug log saved to: ${debugFileName}`);
+        console.log('\x1b[32m%s\x1b[0m', `模型请求处理成功。调试日志保存到: ${debugFileName}`);
       } else {
-        console.log('\x1b[32m%s\x1b[0m', 'Models request processed successfully.');
+        console.log('\x1b[32m%s\x1b[0m', '模型请求处理成功。');
       }
       
       res.json(models);
     } catch (error) {
-      // Log the API call with error
+      // 记录带错误的API调用
       const debugFileName = await debugLogger.logApiCall('/v1/models', req, null, error);
       
-      // Print error message in red
+      // 以红色打印错误消息
       if (debugFileName) {
-        console.error('\x1b[31m%s\x1b[0m', `Error fetching models. Debug log saved to: ${debugFileName}`);
+        console.error('\x1b[31m%s\x1b[0m', `获取模型时出错。调试日志保存到: ${debugFileName}`);
       } else {
-        console.error('\x1b[31m%s\x1b[0m', 'Error fetching models.');
+        console.error('\x1b[31m%s\x1b[0m', '获取模型时出错。');
       }
       
-      // Handle authentication errors
+      // 处理认证错误
       if (error.message.includes('Not authenticated') || error.message.includes('access token')) {
         return res.status(401).json({
           error: {
-            message: 'Not authenticated with Qwen. Please authenticate first.',
+            message: '未与Qwen认证。请先认证。',
             type: 'authentication_error'
           }
         });
@@ -510,9 +536,14 @@ class QwenOpenAIProxy {
   
   
   
+  /**
+   * 处理认证初始化请求
+   * @param {Object} req - Express 请求对象
+   * @param {Object} res - Express 响应对象
+   */
   async handleAuthInitiate(req, res) {
     try {
-      // Initiate device flow
+      // 启动设备流程
       const deviceFlow = await authManager.initiateDeviceFlow();
       
       const response = {
@@ -522,23 +553,23 @@ class QwenOpenAIProxy {
         code_verifier: deviceFlow.code_verifier // This should be stored securely for polling
       };
       
-      // Log the API call
+      // 记录API调用
       const debugFileName = await debugLogger.logApiCall('/auth/initiate', req, response);
       
-      // Print success message with debug file info in green
+      // 以绿色打印成功消息和调试文件信息
       if (debugFileName) {
-        console.log('\x1b[32m%s\x1b[0m', `Auth initiate request processed successfully. Debug log saved to: ${debugFileName}`);
+        console.log('\x1b[32m%s\x1b[0m', `认证初始化请求处理成功。调试日志保存到: ${debugFileName}`);
       } else {
-        console.log('\x1b[32m%s\x1b[0m', 'Auth initiate request processed successfully.');
+        console.log('\x1b[32m%s\x1b[0m', '认证初始化请求处理成功。');
       }
       
       res.json(response);
     } catch (error) {
-      // Log the API call with error
+      // 记录带错误的API调用
       await debugLogger.logApiCall('/auth/initiate', req, null, error);
       
-      // Print error message in red
-      console.error('\x1b[31m%s\x1b[0m', `Error initiating authentication: ${error.message}`);
+      // 以红色打印错误消息
+      console.error('\x1b[31m%s\x1b[0m', `初始化认证时出错: ${error.message}`);
       
       res.status(500).json({
         error: {
@@ -549,47 +580,52 @@ class QwenOpenAIProxy {
     }
   }
   
+  /**
+   * 处理认证轮询请求
+   * @param {Object} req - Express 请求对象
+   * @param {Object} res - Express 响应对象
+   */
   async handleAuthPoll(req, res) {
     try {
-      // Validate the request body
+      // 验证请求体
       const validatedBody = this.validateRequest(this.authPollSchema, req.body);
       const { device_code, code_verifier } = validatedBody;
       
-      // Poll for token
+      // 轮询获取token
       const token = await authManager.pollForToken(device_code, code_verifier);
       
       const response = {
         access_token: token,
-        message: 'Authentication successful'
+        message: '认证成功'
       };
       
-      // Log the API call
+      // 记录API调用
       const debugFileName = await debugLogger.logApiCall('/auth/poll', req, response);
       
-      // Print success message with debug file info in green
+      // 以绿色打印成功消息和调试文件信息
       if (debugFileName) {
-        console.log('\x1b[32m%s\x1b[0m', `Auth poll request processed successfully. Debug log saved to: ${debugFileName}`);
+        console.log('\x1b[32m%s\x1b[0m', `认证轮询请求处理成功。调试日志保存到: ${debugFileName}`);
       } else {
-        console.log('\x1b[32m%s\x1b[0m', 'Auth poll request processed successfully.');
+        console.log('\x1b[32m%s\x1b[0m', '认证轮询请求处理成功。');
       }
       
       res.json(response);
     } catch (error) {
-      // Check if it's a validation error
+      // 检查是否为验证错误
       if (error.message.includes('Validation error')) {
-        console.error('\x1b[31m%s\x1b[0m', `Validation error: ${error.message}`);
+        console.error('\x1b[31m%s\x1b[0m', `验证错误: ${error.message}`);
         const validationError = ErrorFormatter.openAIValidationError(error.message);
         return res.status(validationError.status).json(validationError.body);
       }
       
-      // Log the API call with error
+      // 记录带错误的API调用
       await debugLogger.logApiCall('/auth/poll', req, null, error);
       
-      // Also log detailed error separately
+      // 单独记录详细错误
       await debugLogger.logError('/auth/poll', error, 'error');
       
-      // Print error message in red
-      console.error('\x1b[31m%s\x1b[0m', `Error polling for token: ${error.message}`);
+      // 以红色打印错误消息
+      console.error('\x1b[31m%s\x1b[0m', `轮询获取token时出错: ${error.message}`);
       
       const apiError = ErrorFormatter.openAIApiError(error.message, 'authentication_error');
       res.status(apiError.status).json(apiError.body);
@@ -597,15 +633,15 @@ class QwenOpenAIProxy {
   }
 }
 
-// Initialize proxies
+// 初始化代理
 const proxy = new QwenOpenAIProxy(metricsCollector);
 const anthropicProxy = new AnthropicProxy(debugLogger);
 
-// OpenAI-compatible routes
+// OpenAI兼容路由
 app.post('/v1/chat/completions', (req, res) => proxy.handleChatCompletion(req, res));
 app.get('/v1/models', (req, res) => proxy.handleModels(req, res));
 
-// Anthropic API routes for Claude Code CLI compatibility
+// Claude Code CLI兼容的Anthropic API路由
 app.post('/anthropic/v1/messages', (req, res) => {
   // 检查是否为流式请求
   if (req.body.stream) {
@@ -616,11 +652,12 @@ app.post('/anthropic/v1/messages', (req, res) => {
 });
 app.get('/anthropic/v1/models', (req, res) => anthropicProxy.handleModels(req, res));
 
-// Authentication routes
+// 认证路由
 app.post('/auth/initiate', (req, res) => proxy.handleAuthInitiate(req, res));
 app.post('/auth/poll', (req, res) => proxy.handleAuthPoll(req, res));
 
-// Metrics endpoint for Prometheus
+// Prometheus的指标端点
+// Prometheus指标端点
 app.get('/metrics', async (req, res) => {
   try {
     res.set('Content-Type', 'text/plain');
@@ -632,7 +669,8 @@ app.get('/metrics', async (req, res) => {
   }
 });
 
-// Health check endpoint
+// 健康检查端点
+// 健康检查端点
 app.get('/health', async (req, res) => {
   try {
     await qwenAPI.authManager.loadAllAccounts();
@@ -680,7 +718,7 @@ app.get('/health', async (req, res) => {
     const expiringSoonCount = accounts.filter(a => a.status === 'expiring_soon').length;
     const expiredCount = accounts.filter(a => a.status === 'expired').length;
     
-    // Get token usage data
+    // 获取token使用数据
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
     
@@ -743,11 +781,11 @@ app.get('/health', async (req, res) => {
 const PORT = config.port;
 const HOST = config.host;
 
-// Handle graceful shutdown to save pending data
+// 处理优雅关闭以保存待处理数据
 process.on('SIGINT', async () => {
   console.log('\n\x1b[33m%s\x1b[0m', 'Received SIGINT, shutting down gracefully...');
   try {
-    // Force save any pending request counts before exit
+    // 在退出前强制保存任何待处理的请求计数
     await qwenAPI.saveRequestCounts();
     console.log('\x1b[32m%s\x1b[0m', 'Request counts saved successfully');
   } catch (error) {
@@ -759,7 +797,7 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
   console.log('\n\x1b[33m%s\x1b[0m', 'Received SIGTERM, shutting down gracefully...');
   try {
-    // Force save any pending request counts before exit
+    // 在退出前强制保存任何待处理的请求计数
     await qwenAPI.saveRequestCounts();
     console.log('\x1b[32m%s\x1b[0m', 'Request counts saved successfully');
   } catch (error) {
@@ -771,15 +809,15 @@ process.on('SIGTERM', async () => {
 app.listen(PORT, HOST, async () => {
   console.log(`Qwen OpenAI Proxy listening on http://${HOST}:${PORT}`);
   console.log(`OpenAI-compatible endpoint: http://${HOST}:${PORT}/v1`);
-  console.log(`Anthropic-compatible endpoint: http://${HOST}:${PORT}/v2`);
+  console.log(`Anthropic-compatible endpoint: http://${HOST}:${PORT}/anthropic`);
   console.log(`Authentication endpoint: http://${HOST}:${PORT}/auth/initiate`);
   
-  // Show available accounts
+  // 显示可用账户
   try {
     await qwenAPI.authManager.loadAllAccounts();
     const accountIds = qwenAPI.authManager.getAccountIds();
     
-    // Show default account if configured
+    // 如果已配置，显示默认账户
     const defaultAccount = config.defaultAccount;
     if (defaultAccount) {
       console.log(`\n\x1b[36mDefault account configured: ${defaultAccount}\x1b[0m`);
@@ -795,7 +833,7 @@ app.listen(PORT, HOST, async () => {
       }
       console.log('\n\x1b[33mNote: Try using the proxy to make sure accounts are not invalid\x1b[0m');
     } else {
-      // Check if default account exists
+      // 检查默认账户是否存在
       const defaultCredentials = await qwenAPI.authManager.loadCredentials();
       if (defaultCredentials) {
         const isValid = qwenAPI.authManager.isTokenValid(defaultCredentials);

@@ -4,6 +4,11 @@
  */
 
 /**
+ * Anthropic 与 Qwen 之间的转换器
+ * 处理请求和响应格式的转换
+ */
+
+/**
  * 将 Anthropic API 请求转换为 Qwen API 请求
  * @param {Object} anthropicReq - Anthropic API 请求对象
  * @returns {Object} 转换后的 Qwen API 请求对象

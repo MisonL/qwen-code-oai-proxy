@@ -3,6 +3,11 @@
  * 定义代理支持的 Anthropic 模型（仅保留 Claude Code 2.0+ 版本会用到的）
  */
 
+/**
+ * Anthropic 模型列表
+ * 定义代理支持的 Anthropic 模型（仅保留 Claude Code 2.0+ 版本会用到的）
+ */
+
 const anthropicModels = [
   {
     id: 'claude-3-5-sonnet-latest',

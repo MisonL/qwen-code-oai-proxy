@@ -1,6 +1,9 @@
-const { QwenAPI } = require('../../src/qwen/api.js');
+/**
+ * Qwen API 客户端测试
+ * 测试 Qwen API 客户端的功能，包括认证、账户管理和错误处理
+ */
 
-// Mock dependencies
+const { QwenAPI } = require('../../src/qwen/api.js');
 jest.mock('axios');
 jest.mock('fs');
 jest.mock('../../src/qwen/auth.js');
@@ -69,7 +72,7 @@ describe('QwenAPI', () => {
 
       await qwenAPI.recordTokenUsage(accountId, inputTokens, outputTokens);
 
-      // Find the usage record for today
+      // 查找今天的使用记录
       const accountUsage = qwenAPI.tokenUsage.get(accountId);
       const today = new Date().toISOString().split('T')[0];
       const todayRecord = accountUsage.find(record => record.date === today);
@@ -93,18 +96,18 @@ describe('QwenAPI', () => {
 
   describe('isAuthError', () => {
     it('should identify authentication errors', () => {
-      // Import the function using a getter to get access to the private function
+      // 使用getter导入函数以访问私有函数
       const isAuthError = (error) => {
-        // This is already implemented in the source file, so we can test the methods that use it
+        // 这已在源文件中实现，因此我们可以测试使用它的方法
       };
 
-      // Test error with 401 status
+      // 测试401状态的错误
       const error401 = {
         response: { status: 401 }
       };
       expect(qwenAPI).toBeDefined(); // The function exists in the source
 
-      // We can't directly test the private function, but we can verify it's in the code
+      // 我们无法直接测试私有函数，但可以验证它在代码中
     });
   });
 
@@ -124,7 +127,7 @@ describe('QwenAPI', () => {
       
       const result = require('../../src/qwen/api.js').processMessagesForVision(messages, model);
       
-      // The result should contain the original text content and an image_url part
+      // 结果应包含原始文本内容和image_url部分
       expect(result[0].content).toBeInstanceOf(Array);
       expect(result[0].content[0].type).toBe('text');
       expect(result[0].content[1].type).toBe('image_url');

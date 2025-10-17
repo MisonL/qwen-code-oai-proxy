@@ -1,22 +1,27 @@
+/**
+ * Token计数工具
+ * 使用tiktoken计算消息中的token数量
+ */
+
 const { get_encoding } = require('tiktoken');
 
 /**
- * Count tokens in messages using tiktoken
- * @param {Array|String|Object} input - Input to count tokens for
- * @returns {number} - Number of tokens
+ * 使用tiktoken计算消息中的token数量
+ * @param {Array|String|Object} input - 要计算token的输入
+ * @returns {number} - token数量
  */
 function countTokens(input) {
   try {
-    // Convert input to string format for token counting
+    // 将输入转换为字符串格式以进行token计数
     let inputString = '';
     
     if (typeof input === 'string') {
       inputString = input;
     } else if (Array.isArray(input)) {
-      // Handle array of messages
+      // 处理消息数组
       inputString = JSON.stringify(input);
     } else if (typeof input === 'object' && input !== null) {
-      // Handle message objects
+      // 处理消息对象
       if (input.content) {
         inputString = typeof input.content === 'string' ? input.content : JSON.stringify(input.content);
       } else {
@@ -26,18 +31,18 @@ function countTokens(input) {
       inputString = String(input);
     }
     
-    // Use cl100k_base encoding (GPT-4 tokenizer, good approximation for Qwen)
+    // 使用cl100k_base编码（GPT-4分词器，对Qwen来说是很好的近似）
     const encoding = get_encoding('cl100k_base');
     const tokens = encoding.encode(inputString);
     const tokenCount = tokens.length;
     
-    // Clean up encoding resources
+    // 清理编码资源
     encoding.free();
     
     return tokenCount;
   } catch (error) {
-    console.warn('Error counting tokens, falling back to character approximation:', error);
-    // Fallback: rough approximation using character count
+    console.warn('计算token时出错，回退到字符近似:', error);
+    // 回退：使用字符计数进行粗略近似
     
     let inputString = '';
     if (typeof input === 'string') {
@@ -54,7 +59,7 @@ function countTokens(input) {
       inputString = String(input);
     }
     
-    return Math.ceil(inputString.length / 4); // Rough estimate: 1 token ≈ 4 characters
+    return Math.ceil(inputString.length / 4); // 粗略估计：1个token ≈ 4个字符
   }
 }
 
