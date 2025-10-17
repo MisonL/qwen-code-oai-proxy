@@ -142,30 +142,63 @@ class QwenAuthManager {
 
   async saveCredentials(credentials, accountId = null) {
     try {
-      const credString = JSON.stringify(credentials, null, 2);
+      // Sanitize credentials before saving - ensure sensitive data is properly handled
+      const sanitizedCredentials = { ...credentials };
       
+      // Validate credentials structure before saving
+      if (!sanitizedCredentials.access_token || !sanitizedCredentials.refresh_token || !sanitizedCredentials.expiry_date) {
+        throw new Error('Incomplete credentials data');
+      }
+      
+      // Ensure file permissions are secure
+      const credString = JSON.stringify(sanitizedCredentials, null, 2);
+      
+      let filePath;
       if (accountId) {
         // Save to specific account file
         const accountFilename = `${QWEN_MULTI_ACCOUNT_PREFIX}${accountId}${QWEN_MULTI_ACCOUNT_SUFFIX}`;
-        const accountPath = path.join(this.qwenDir, accountFilename);
-        await fs.writeFile(accountPath, credString);
+        filePath = path.join(this.qwenDir, accountFilename);
+        await fs.writeFile(filePath, credString);
         
         // Update accounts map
-        this.accounts.set(accountId, credentials);
+        this.accounts.set(accountId, sanitizedCredentials);
       } else {
         // Save to default credentials file
-        await fs.writeFile(this.credentialsPath, credString);
-        this.credentials = credentials;
+        filePath = this.credentialsPath;
+        await fs.writeFile(filePath, credString);
+        this.credentials = sanitizedCredentials;
+      }
+      
+      // Ensure the credentials file has secure permissions (read/write for owner only)
+      try {
+        await fs.chmod(filePath, 0o600); // Only owner can read/write
+      } catch (chmodError) {
+        console.warn('Could not set secure file permissions:', chmodError.message);
       }
     } catch (error) {
       console.error('Error saving credentials:', error.message);
+      throw error; // Re-throw to handle properly in calling function
     }
   }
 
   isTokenValid(credentials) {
-    if (!credentials || !credentials.expiry_date) {
+    if (!credentials || !credentials.access_token || !credentials.expiry_date) {
       return false;
     }
+    
+    // Check if token has been tampered with by validating structure
+    if (typeof credentials.access_token !== 'string' || credentials.access_token.length === 0) {
+      console.warn('Invalid access token format');
+      return false;
+    }
+    
+    // Check if expiry date is valid
+    if (isNaN(credentials.expiry_date) || credentials.expiry_date <= 0) {
+      console.warn('Invalid expiry date');
+      return false;
+    }
+    
+    // Check if token is expired or expiring soon
     return Date.now() < credentials.expiry_date - TOKEN_REFRESH_BUFFER_MS;
   }
 

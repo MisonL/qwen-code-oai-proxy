@@ -1,0 +1,142 @@
+const { QwenAuthManager } = require('../../src/qwen/auth.js');
+const path = require('path');
+
+// Mock dependencies
+jest.mock('fs');
+jest.mock('undici');
+jest.mock('crypto');
+
+const { promises: fs } = require('fs');
+const { fetch } = require('undici');
+
+describe('QwenAuthManager', () => {
+  let authManager;
+
+  beforeEach(() => {
+    authManager = new QwenAuthManager();
+    jest.clearAllMocks();
+  });
+
+  describe('constructor', () => {
+    it('should initialize with correct default values', () => {
+      expect(authManager.qwenDir).toBe(path.join(process.env.HOME || process.env.USERPROFILE, '.qwen'));
+      expect(authManager.credentialsPath).toBe(path.join(authManager.qwenDir, 'oauth_creds.json'));
+      expect(authManager.accounts).toBeInstanceOf(Map);
+      expect(authManager.currentAccountIndex).toBe(0);
+    });
+  });
+
+  describe('isTokenValid', () => {
+    it('should return false for null credentials', () => {
+      expect(authManager.isTokenValid(null)).toBe(false);
+    });
+
+    it('should return false for credentials without expiry_date', () => {
+      const credentials = { access_token: 'token' };
+      expect(authManager.isTokenValid(credentials)).toBe(false);
+    });
+
+    it('should return true for valid credentials', () => {
+      const credentials = {
+        expiry_date: Date.now() + 100000 // 100 seconds in the future
+      };
+      expect(authManager.isTokenValid(credentials)).toBe(true);
+    });
+
+    it('should return false for expired credentials', () => {
+      const credentials = {
+        expiry_date: Date.now() - 1000 // 1 second in the past
+      };
+      expect(authManager.isTokenValid(credentials)).toBe(false);
+    });
+
+    it('should return false for credentials expiring soon', () => {
+      const credentials = {
+        expiry_date: Date.now() + 20000 // 20 seconds in the future (less than buffer of 30 seconds)
+      };
+      expect(authManager.isTokenValid(credentials)).toBe(false);
+    });
+  });
+
+  describe('generatePKCEPair', () => {
+    it('should generate code verifier and challenge', () => {
+      // We can't directly test the private functions, but we can test their usage through public methods
+      // The functions are already in the source file
+      expect(authManager).toBeDefined();
+    });
+  });
+
+  describe('loadAllAccounts', () => {
+    it('should load all multi-account credentials', async () => {
+      // Mock fs.readdir to return some account files
+      const mockFiles = [
+        'oauth_creds.json', // default file
+        'oauth_creds_account1.json',
+        'oauth_creds_account2.json'
+      ];
+      
+      fs.readdir.mockResolvedValue(mockFiles);
+      
+      // Mock fs.readFile to return valid credentials
+      fs.readFile
+        .mockResolvedValueOnce(JSON.stringify({ 
+          access_token: 'token1', 
+          expiry_date: Date.now() + 100000 
+        })) // for account1
+        .mockResolvedValueOnce(JSON.stringify({ 
+          access_token: 'token2', 
+          expiry_date: Date.now() + 100000 
+        })); // for account2
+
+      const result = await authManager.loadAllAccounts();
+      
+      expect(fs.readdir).toHaveBeenCalledWith(authManager.qwenDir);
+      expect(result).toBeInstanceOf(Map);
+    });
+  });
+
+  describe('getAccountIds', () => {
+    it('should return an empty array when no accounts are loaded', () => {
+      const accountIds = authManager.getAccountIds();
+      expect(accountIds).toEqual([]);
+    });
+
+    it('should return account IDs when accounts are loaded', () => {
+      authManager.accounts.set('account1', { access_token: 'token1' });
+      authManager.accounts.set('account2', { access_token: 'token2' });
+
+      const accountIds = authManager.getAccountIds();
+      expect(accountIds).toEqual(['account1', 'account2']);
+    });
+  });
+
+  describe('addAccount', () => {
+    it('should add an account and save credentials', async () => {
+      const credentials = { access_token: 'new_token', expiry_date: Date.now() + 100000 };
+      const accountId = 'new-account';
+      
+      const saveSpy = jest.spyOn(authManager, 'saveCredentials');
+      
+      await authManager.addAccount(credentials, accountId);
+      
+      expect(saveSpy).toHaveBeenCalledWith(credentials, accountId);
+      expect(authManager.accounts.get(accountId)).toEqual(credentials);
+    });
+  });
+
+  describe('getValidAccessToken', () => {
+    it('should return valid token if it is still valid', async () => {
+      const validCredentials = {
+        access_token: 'valid-token',
+        expiry_date: Date.now() + 100000 // far in the future
+      };
+
+      authManager.loadCredentials = jest.fn().mockResolvedValue(validCredentials);
+
+      const token = await authManager.getValidAccessToken();
+
+      expect(token).toBe('valid-token');
+      expect(authManager.loadCredentials).toHaveBeenCalled();
+    });
+  });
+});

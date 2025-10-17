@@ -1,8 +1,33 @@
 const axios = require('axios');
+const http = require('http');
+const https = require('https');
 const { QwenAuthManager } = require('./auth.js');
 const { PassThrough } = require('stream');
 const path = require('path');
 const { promises: fs } = require('fs');
+const { Cache } = require('../utils/cache.js');
+
+// Create HTTP agents with connection pooling
+const httpAgent = new http.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 1000,
+  maxSockets: 50,
+  maxFreeSockets: 10,
+  timeout: 60000,
+  freeSocketTimeout: 30000
+});
+
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 1000,
+  maxSockets: 50,
+  maxFreeSockets: 10,
+  timeout: 60000,
+  freeSocketTimeout: 30000
+});
+
+// Create cache instance for static data
+const staticDataCache = new Cache();
 
 // Default Qwen configuration
 const DEFAULT_QWEN_API_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
@@ -186,6 +211,14 @@ class QwenAPI {
     this.lastSaveTime = 0;
     this.saveInterval = 60000; // Save every 60 seconds
     this.pendingSave = false;
+    
+    // Concurrent request handling
+    this.accountLocks = new Map(); // Track which accounts are in use
+    this.accountQueues = new Map(); // Queue for requests waiting for specific accounts
+    
+    // Rate limiting per account
+    this.accountRequestCounts = new Map(); // Track requests per account per time window
+    this.requestWindowDuration = 60000; // 1 minute window
     
     this.loadRequestCounts();
     this.loadFailedAccounts();
@@ -563,16 +596,41 @@ class QwenAPI {
     if (accountIds.length === 0) {
       return this.chatCompletionsSingleAccount(request);
     }
+    
     const tried = new Set();
     let lastError = null;
     const maxAttempts = 2;
+    
     for (let i = 0; i < maxAttempts; i++) {
       const bestAccount = await this.getBestAccount(tried);
       if (!bestAccount) {
         break;
       }
+      
       try {
-        return await this.processRequestWithAccount(request, bestAccount);
+        // Check if account is rate limited
+        if (this.isAccountRateLimited(bestAccount.accountId)) {
+          // Mark account as tried and continue to the next
+          tried.add(bestAccount.accountId);
+          continue;
+        }
+        
+        // Try to acquire lock for this account
+        const lockAcquired = await this.acquireAccountLock(bestAccount.accountId);
+        if (!lockAcquired) {
+          // Account is in use, skip to next attempt
+          tried.add(bestAccount.accountId);
+          continue;
+        }
+        
+        try {
+          // Increment request count after acquiring lock but before processing
+          this.incrementAccountRequestCount(bestAccount.accountId);
+          return await this.processRequestWithAccount(request, bestAccount);
+        } finally {
+          // Always release the lock after request is done (success or failure)
+          this.releaseAccountLock(bestAccount.accountId);
+        }
       } catch (error) {
         lastError = error;
         await this.handleRequestError(error, bestAccount.accountId);
@@ -580,6 +638,7 @@ class QwenAPI {
         continue;
       }
     }
+    
     if (lastError) throw lastError;
     throw new Error('No healthy accounts available');
   }
@@ -621,7 +680,9 @@ class QwenAPI {
 
     const response = await axios.post(url, payload, { 
       headers: headers,
-      timeout: 300000 // 5 minutes timeout
+      timeout: 300000, // 5 minutes timeout
+      httpAgent,
+      httpsAgent
     });
 
     // Increment request count for successful request
@@ -712,7 +773,7 @@ class QwenAPI {
     };
     
     try {
-      const response = await axios.post(url, payload, { headers, timeout: 300000 }); // 5 minute timeout
+      const response = await axios.post(url, payload, { headers, timeout: 300000, httpAgent, httpsAgent }); // 5 minute timeout
       // Reset auth error count on successful request (for consistency, even though we don't rotate)
       this.resetAuthErrorCount('default');
       
@@ -744,7 +805,7 @@ class QwenAPI {
             'User-Agent': 'QwenOpenAIProxy/1.0.0 (linux; x64)'
           };
           
-          const retryResponse = await axios.post(url, payload, { headers: retryHeaders, timeout: 300000 });
+          const retryResponse = await axios.post(url, payload, { headers: retryHeaders, timeout: 300000, httpAgent, httpsAgent });
           console.log('\x1b[32m%s\x1b[0m', 'Request succeeded after token refresh');
           // Reset auth error count on successful request
           this.resetAuthErrorCount('default');
@@ -769,14 +830,99 @@ class QwenAPI {
     }
   }
 
+  /**
+   * Acquire a lock for an account to prevent concurrent requests
+   * @param {string} accountId - The account ID to lock
+   * @returns {Promise<boolean>} True if lock was acquired, false otherwise
+   */
+  async acquireAccountLock(accountId) {
+    if (!this.accountLocks.has(accountId)) {
+      // No one is using this account, acquire the lock
+      this.accountLocks.set(accountId, true);
+      return true;
+    }
+    
+    // Account is currently in use, return false
+    return false;
+  }
+
+  /**
+   * Release a lock for an account
+   * @param {string} accountId - The account ID to unlock
+   */
+  releaseAccountLock(accountId) {
+    if (this.accountLocks.has(accountId)) {
+      this.accountLocks.delete(accountId);
+    }
+  }
+
+  /**
+   * Check if account has exceeded rate limit
+   * @param {string} accountId - The account ID to check
+   * @returns {boolean} True if rate limit exceeded, false otherwise
+   */
+  isAccountRateLimited(accountId) {
+    const now = Date.now();
+    const accountData = this.accountRequestCounts.get(accountId) || { count: 0, resetTime: now + this.requestWindowDuration };
+    
+    // If window has passed, reset the count
+    if (now >= accountData.resetTime) {
+      accountData.count = 0;
+      accountData.resetTime = now + this.requestWindowDuration;
+    }
+    
+    // For Qwen accounts, we'll use a default limit of 1800 requests per hour (30 per minute)
+    // But since we're checking per minute, that's 30 requests per minute
+    const rateLimit = 30; // requests per window
+    
+    // Check if we've exceeded the rate limit
+    if (accountData.count >= rateLimit) {
+      console.log(`\x1b[33mAccount ${accountId} has exceeded rate limit (${rateLimit} requests per ${this.requestWindowDuration/1000}s window)\x1b[0m`);
+      return true;
+    }
+    
+    return false;
+  }
+
+  /**
+   * Increment account request count
+   * @param {string} accountId - The account ID to increment
+   */
+  incrementAccountRequestCount(accountId) {
+    const now = Date.now();
+    let accountData = this.accountRequestCounts.get(accountId);
+    
+    if (!accountData || now >= accountData.resetTime) {
+      // Reset the window if it has passed
+      accountData = { count: 0, resetTime: now + this.requestWindowDuration };
+    }
+    
+    accountData.count++;
+    this.accountRequestCounts.set(accountId, accountData);
+  }
+
   async listModels() {
+    const cacheKey = 'qwen_models';
+    
+    // Check if models are already cached
+    const cachedModels = staticDataCache.get(cacheKey);
+    if (cachedModels) {
+      console.log('Returning cached models list');
+      return cachedModels;
+    }
+    
     console.log('Returning mock models list');
     
-    // Return a mock list of Qwen models since Qwen API doesn't have this endpoint
-    return {
+    // Create models response
+    const modelsResponse = {
       object: 'list',
       data: QWEN_MODELS
     };
+    
+    // Cache the models for 1 hour
+    staticDataCache.set(cacheKey, modelsResponse, 60 * 60 * 1000); // 1 hour
+    
+    return modelsResponse;
   }
 
   
@@ -807,7 +953,7 @@ class QwenAPI {
       const payload = { model, messages: processedMessages, temperature: request.temperature, max_tokens: request.max_tokens, top_p: request.top_p, tools: request.tools, tool_choice: request.tool_choice, stream: true, stream_options: { include_usage: true } };
       const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${credentials.access_token}`, 'User-Agent': 'QwenOpenAIProxy/1.0.0 (linux; x64)', 'Accept': 'text/event-stream' };
       const stream = new PassThrough();
-      const response = await axios.post(url, payload, { headers, timeout: 300000, responseType: 'stream' });
+      const response = await axios.post(url, payload, { headers, timeout: 300000, responseType: 'stream', httpAgent, httpsAgent });
       response.data.pipe(stream);
       return stream;
     }
@@ -823,29 +969,54 @@ class QwenAPI {
       const payload = { model, messages: processedMessages, temperature: request.temperature, max_tokens: request.max_tokens, top_p: request.top_p, tools: request.tools, tool_choice: request.tool_choice, stream: true, stream_options: { include_usage: true } };
       const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}`, 'User-Agent': 'QwenOpenAIProxy/1.0.0 (linux; x64)', 'Accept': 'text/event-stream' };
       const stream = new PassThrough();
-      const response = await axios.post(url, payload, { headers, timeout: 300000, responseType: 'stream' });
+      const response = await axios.post(url, payload, { headers, timeout: 300000, responseType: 'stream', httpAgent, httpsAgent });
       response.data.pipe(stream);
       return stream;
     }
 
-    // Two-attempt rotation
+    // Two-attempt rotation with account locking and rate limiting
     const tried = new Set();
     let lastError = null;
     for (let i = 0; i < 2; i++) {
       const bestAccount = await this.getBestAccount(tried);
       if (!bestAccount) break;
       const { accountId, credentials } = bestAccount;
+      
       try {
-        const apiEndpoint = await this.getApiEndpoint(credentials);
-        const url = `${apiEndpoint}/chat/completions`;
-        const model = request.model || DEFAULT_MODEL;
-        const processedMessages = processMessagesForVision(request.messages, model);
-        const payload = { model, messages: processedMessages, temperature: request.temperature, max_tokens: request.max_tokens, top_p: request.top_p, tools: request.tools, tool_choice: request.tool_choice, stream: true, stream_options: { include_usage: true } };
-        const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${credentials.access_token}`, 'User-Agent': 'QwenOpenAIProxy/1.0.0 (linux; x64)', 'Accept': 'text/event-stream' };
-        const stream = new PassThrough();
-        const response = await axios.post(url, payload, { headers, timeout: 300000, responseType: 'stream' });
-        response.data.pipe(stream);
-        return stream;
+        // Check if account is rate limited
+        if (this.isAccountRateLimited(accountId)) {
+          // Mark account as tried and continue to the next
+          tried.add(accountId);
+          continue;
+        }
+        
+        // Try to acquire lock for this account
+        const lockAcquired = await this.acquireAccountLock(accountId);
+        if (!lockAcquired) {
+          // Account is in use, skip to next attempt
+          tried.add(accountId);
+          continue;
+        }
+        
+        try {
+          const apiEndpoint = await this.getApiEndpoint(credentials);
+          const url = `${apiEndpoint}/chat/completions`;
+          const model = request.model || DEFAULT_MODEL;
+          const processedMessages = processMessagesForVision(request.messages, model);
+          const payload = { model, messages: processedMessages, temperature: request.temperature, max_tokens: request.max_tokens, top_p: request.top_p, tools: request.tools, tool_choice: request.tool_choice, stream: true, stream_options: { include_usage: true } };
+          const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${credentials.access_token}`, 'User-Agent': 'QwenOpenAIProxy/1.0.0 (linux; x64)', 'Accept': 'text/event-stream' };
+          const stream = new PassThrough();
+          
+          // Increment request count after acquiring lock but before processing
+          this.incrementAccountRequestCount(accountId);
+          
+          const response = await axios.post(url, payload, { headers, timeout: 300000, responseType: 'stream', httpAgent, httpsAgent });
+          response.data.pipe(stream);
+          return stream;
+        } finally {
+          // Always release the lock after request is done (success or failure)
+          this.releaseAccountLock(accountId);
+        }
       } catch (error) {
         lastError = error;
         await this.handleRequestError(error, accountId);
